@@ -21,8 +21,11 @@ export function useWebSocket() {
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data) as SimulationUpdate;
-        setLastUpdate(data);
+        const data = JSON.parse(event.data);
+        // Only process simulation_update messages; ignore pong and other control messages
+        if (data?.type === 'simulation_update') {
+          setLastUpdate(data as SimulationUpdate);
+        }
       } catch {
         // ignore parse errors
       }

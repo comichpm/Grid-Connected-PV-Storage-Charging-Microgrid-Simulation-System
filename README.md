@@ -49,7 +49,48 @@
 
 ## 快速启动
 
-### 方式一：Docker 一键部署（推荐）
+### 方式一：一键脚本（无需 Docker，最简单）✅ 推荐
+
+**前提条件：** Python 3.10+、Node.js 18+、npm
+
+```bash
+git clone https://github.com/comichpm/Grid-Connected-PV-Storage-Charging-Microgrid-Simulation-System.git
+cd Grid-Connected-PV-Storage-Charging-Microgrid-Simulation-System
+
+# Linux / macOS
+chmod +x start.sh && ./start.sh
+
+# Windows
+start.bat
+```
+
+脚本自动完成：安装 Python 依赖 → 安装前端依赖 → 构建前端 → 启动后端
+
+启动后：
+- **系统界面**：http://localhost:8000
+- **API 文档**：http://localhost:8000/docs
+
+---
+
+### 方式二：分开手动启动（开发模式）
+
+**后端：**
+```bash
+pip install -r backend/requirements.txt
+python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+**前端（另开一个终端）：**
+```bash
+cd frontend
+npm install --legacy-peer-deps
+npm run dev
+# 访问 http://localhost:3000
+```
+
+---
+
+### 方式三：Docker 一键部署
 
 ```bash
 git clone https://github.com/comichpm/Grid-Connected-PV-Storage-Charging-Microgrid-Simulation-System.git
@@ -57,23 +98,6 @@ cd Grid-Connected-PV-Storage-Charging-Microgrid-Simulation-System
 docker compose up -d
 # 前端: http://localhost
 # API 文档: http://localhost:8000/docs
-```
-
-### 方式二：手动启动
-
-**后端：**
-```bash
-cd backend
-pip install -r requirements.txt
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000
-```
-
-**前端：**
-```bash
-cd frontend
-npm install
-npm run dev
-# 访问 http://localhost:3000
 ```
 
 ---

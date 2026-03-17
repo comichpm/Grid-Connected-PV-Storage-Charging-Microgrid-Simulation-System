@@ -27,7 +27,7 @@ const App: React.FC = () => {
     setSimTimeHours(lastUpdate.sim_time_hours);
     setPowerBalance(lastUpdate.power_balance);
     const stateMap: Record<string, DeviceState> = {};
-    lastUpdate.devices.forEach((d) => {
+    (lastUpdate.devices ?? []).forEach((d) => {
       stateMap[d.id] = d;
     });
     setDeviceStates(stateMap);
