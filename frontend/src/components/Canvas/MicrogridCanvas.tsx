@@ -10,6 +10,7 @@ import {
   type Connection,
   type Node,
   type Edge,
+  type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -18,15 +19,16 @@ import { PVNode } from './PVNode';
 import { BESSNode } from './BESSNode';
 import { EVChargerNode } from './EVChargerNode';
 import { LoadNode } from './LoadNode';
-import type { DeviceInfo, DeviceState, DeviceType } from '../../types';
+import type { DeviceState, DeviceType } from '../../types';
 import { createDevice, deleteDevice, saveTopology } from '../../services/api';
 
-const nodeTypes = {
-  grid: GridNode,
-  pv: PVNode,
-  bess: BESSNode,
-  ev_charger: EVChargerNode,
-  load: LoadNode,
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nodeTypes: NodeTypes = {
+  grid: GridNode as NodeTypes[string],
+  pv: PVNode as NodeTypes[string],
+  bess: BESSNode as NodeTypes[string],
+  ev_charger: EVChargerNode as NodeTypes[string],
+  load: LoadNode as NodeTypes[string],
 };
 
 interface MicrogridCanvasProps {

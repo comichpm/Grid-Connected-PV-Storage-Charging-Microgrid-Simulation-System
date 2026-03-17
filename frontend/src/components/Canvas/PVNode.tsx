@@ -1,17 +1,17 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
 
-interface PVNodeProps {
-  data: {
-    state?: DeviceState;
-    label: string;
-    onClick?: () => void;
-  };
-  selected?: boolean;
+interface PVNodeData extends Record<string, unknown> {
+  state?: DeviceState;
+  label: string;
+  onClick?: () => void;
 }
 
-export const PVNode: React.FC<PVNodeProps> = ({ data, selected }) => {
+type PVNodeType = Node<PVNodeData, 'pv'>;
+
+export const PVNode: React.FC<NodeProps<PVNodeType>> = ({ data, selected }) => {
   const s = data.state;
   const power = Math.abs(s?.power_kw ?? 0);
 

@@ -1,20 +1,19 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
 
-interface GridNodeProps {
-  data: {
-    state?: DeviceState;
-    label: string;
-    onClick?: () => void;
-  };
-  selected?: boolean;
+interface GridNodeData extends Record<string, unknown> {
+  state?: DeviceState;
+  label: string;
+  onClick?: () => void;
 }
 
-export const GridNode: React.FC<GridNodeProps> = ({ data, selected }) => {
+type GridNodeType = Node<GridNodeData, 'grid'>;
+
+export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) => {
   const s = data.state;
   const power = s?.power_kw ?? 0;
-  const importing = power > 0;
   const statusText = !s?.online
     ? '离线'
     : power > 0.1

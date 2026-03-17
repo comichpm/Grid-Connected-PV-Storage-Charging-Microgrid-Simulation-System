@@ -1,15 +1,15 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
 
-interface EVChargerNodeProps {
-  data: {
-    state?: DeviceState;
-    label: string;
-    onClick?: () => void;
-  };
-  selected?: boolean;
+interface EVChargerNodeData extends Record<string, unknown> {
+  state?: DeviceState;
+  label: string;
+  onClick?: () => void;
 }
+
+type EVChargerNodeType = Node<EVChargerNodeData, 'ev_charger'>;
 
 const CHARGE_STATUS: Record<number, string> = {
   0: '空闲',
@@ -19,7 +19,7 @@ const CHARGE_STATUS: Record<number, string> = {
   4: '故障',
 };
 
-export const EVChargerNode: React.FC<EVChargerNodeProps> = ({ data, selected }) => {
+export const EVChargerNode: React.FC<NodeProps<EVChargerNodeType>> = ({ data, selected }) => {
   const s = data.state;
   const power = s?.power_kw ?? 0;
   const status = s?.charge_status ?? 0;

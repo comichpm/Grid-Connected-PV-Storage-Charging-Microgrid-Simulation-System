@@ -1,15 +1,15 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
 
-interface BESSNodeProps {
-  data: {
-    state?: DeviceState;
-    label: string;
-    onClick?: () => void;
-  };
-  selected?: boolean;
+interface BESSNodeData extends Record<string, unknown> {
+  state?: DeviceState;
+  label: string;
+  onClick?: () => void;
 }
+
+type BESSNodeType = Node<BESSNodeData, 'bess'>;
 
 const MODE_LABELS: Record<number, string> = { 0: '待机', 1: '充电', 2: '放电' };
 const MODE_COLORS: Record<number, string> = {
@@ -18,7 +18,7 @@ const MODE_COLORS: Record<number, string> = {
   2: '#FF9800',
 };
 
-export const BESSNode: React.FC<BESSNodeProps> = ({ data, selected }) => {
+export const BESSNode: React.FC<NodeProps<BESSNodeType>> = ({ data, selected }) => {
   const s = data.state;
   const soc = s?.soc ?? 0;
   const mode = s?.control_mode ?? 0;

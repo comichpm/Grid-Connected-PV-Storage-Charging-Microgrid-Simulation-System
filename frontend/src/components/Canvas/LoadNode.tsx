@@ -1,15 +1,15 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
+import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
 
-interface LoadNodeProps {
-  data: {
-    state?: DeviceState;
-    label: string;
-    onClick?: () => void;
-  };
-  selected?: boolean;
+interface LoadNodeData extends Record<string, unknown> {
+  state?: DeviceState;
+  label: string;
+  onClick?: () => void;
 }
+
+type LoadNodeType = Node<LoadNodeData, 'load'>;
 
 const MODE_LABELS: Record<string, string> = {
   constant: '恒定',
@@ -17,7 +17,7 @@ const MODE_LABELS: Record<string, string> = {
   random: '随机',
 };
 
-export const LoadNode: React.FC<LoadNodeProps> = ({ data, selected }) => {
+export const LoadNode: React.FC<NodeProps<LoadNodeType>> = ({ data, selected }) => {
   const s = data.state;
   const power = s?.power_kw ?? 0;
 
