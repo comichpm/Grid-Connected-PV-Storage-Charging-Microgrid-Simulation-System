@@ -1,7 +1,8 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
+import { NodeHandles } from './NodeHandles';
+import { ProtocolBadge, type ProtocolInfo } from './ProtocolBadge';
 
 interface SmartMeterNodeData extends Record<string, unknown> {
   label: string;
@@ -10,7 +11,7 @@ interface SmartMeterNodeData extends Record<string, unknown> {
   onClick?: () => void;
 }
 
-type SmartMeterNodeType = Node<SmartMeterNodeData, 'smart_meter'>;
+type SmartMeterNodeType = Node<SmartMeterNodeData & ProtocolInfo, 'smart_meter'>;
 
 export const SmartMeterNode: React.FC<NodeProps<SmartMeterNodeType>> = ({ data, selected }) => {
   const s = data.state;
@@ -19,7 +20,7 @@ export const SmartMeterNode: React.FC<NodeProps<SmartMeterNodeType>> = ({ data, 
   const pf = s?.power_factor ?? 1;
   const isOnline = s?.online !== false;
   const count = s?.monitored_count ?? 0;
-  const monitorMode = (s as any)?.monitor_mode ?? '全部';
+  const monitorMode = (s as Record<string, unknown>)?.monitor_mode ?? '全部';
 
   const powerColor = activekw > 0.1 ? '#f97316' : activekw < -0.1 ? '#34d399' : '#94a3b8';
 
@@ -28,11 +29,7 @@ export const SmartMeterNode: React.FC<NodeProps<SmartMeterNodeType>> = ({ data, 
       className={`device-node smart-meter-node ${selected ? 'selected' : ''} ${!isOnline ? 'offline' : ''}`}
       onClick={data.onClick}
     >
-      {/* Handles on all 4 sides */}
-      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
-      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
+      <NodeHandles />
       <div className="node-header">
         <span className="node-icon">📊</span>
         <span className="node-title">{data.label}</span>
@@ -57,9 +54,17 @@ export const SmartMeterNode: React.FC<NodeProps<SmartMeterNodeType>> = ({ data, 
         </div>
         <div className="node-row">
           <span>监测模式</span>
-          <span style={{ fontSize: '11px', color: '#94a3b8' }}>{monitorMode}({count}设备)</span>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>{monitorMode as string}({count}台)</span>
         </div>
       </div>
+      <ProtocolBadge
+        modbusPort={data.modbusPort}
+        modbusSlave={data.modbusSlave}
+        modbusMode={data.modbusMode as string | undefined}
+        modbusSerial={data.modbusSerial as string | undefined}
+        modbusBaud={data.modbusBaud as number | undefined}
+        modbusParity={data.modbusParity as string | undefined}
+      />
       <div className="node-type-badge">仪表</div>
     </div>
   );

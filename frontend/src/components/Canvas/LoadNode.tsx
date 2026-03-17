@@ -1,7 +1,8 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
+import { NodeHandles } from './NodeHandles';
+import { ProtocolBadge, type ProtocolInfo } from './ProtocolBadge';
 
 interface LoadNodeData extends Record<string, unknown> {
   state?: DeviceState;
@@ -9,7 +10,7 @@ interface LoadNodeData extends Record<string, unknown> {
   onClick?: () => void;
 }
 
-type LoadNodeType = Node<LoadNodeData, 'load'>;
+type LoadNodeType = Node<LoadNodeData & ProtocolInfo, 'load'>;
 
 const MODE_LABELS: Record<string, string> = {
   constant:    '恒定功率',
@@ -34,11 +35,7 @@ export const LoadNode: React.FC<NodeProps<LoadNodeType>> = ({ data, selected }) 
       className={`device-node load-node ${selected ? 'selected' : ''}`}
       onClick={data.onClick}
     >
-      {/* Handles on all 4 sides */}
-      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
-      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
+      <NodeHandles />
       <div className="node-header">
         <span className="node-icon">💡</span>
         <span className="node-title">{data.label}</span>
@@ -72,6 +69,14 @@ export const LoadNode: React.FC<NodeProps<LoadNodeType>> = ({ data, selected }) 
           <span>{(s?.daily_energy_kwh ?? 0).toFixed(2)} kWh</span>
         </div>
       </div>
+      <ProtocolBadge
+        modbusPort={data.modbusPort}
+        modbusSlave={data.modbusSlave}
+        modbusMode={data.modbusMode as string | undefined}
+        modbusSerial={data.modbusSerial as string | undefined}
+        modbusBaud={data.modbusBaud as number | undefined}
+        modbusParity={data.modbusParity as string | undefined}
+      />
       <div className="node-type-badge">负荷</div>
     </div>
   );

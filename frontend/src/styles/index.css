@@ -762,3 +762,68 @@ body {
 .ps-item.grid {
   font-weight: 600;
 }
+
+/* ---- Multi-position handles (任意位置连接) ---- */
+.node-handle-multi {
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background: #334155 !important;
+  border: 1.5px solid #475569 !important;
+  opacity: 0.7;
+  transition: opacity 0.15s, background 0.15s, transform 0.15s;
+}
+
+.node-handle-multi:hover {
+  opacity: 1 !important;
+  background: #60a5fa !important;
+  border-color: #93c5fd !important;
+  transform: scale(1.4) !important;
+}
+
+/* ---- Protocol badge ---- */
+.protocol-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  margin: 4px 4px 2px;
+  background: #0d1b2a;
+  border-radius: 4px;
+  border: 1px solid #1e293b;
+  font-size: 10px;
+  font-family: 'Courier New', monospace;
+  color: #64748b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.protocol-type {
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.protocol-type.tcp {
+  background: #1e3a5f;
+  color: #60a5fa;
+}
+
+.protocol-type.rtu {
+  background: #1f2d1b;
+  color: #4ade80;
+}
+
+.protocol-detail {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.protocol-slave {
+  color: #64748b;
+  font-size: 10px;
+}

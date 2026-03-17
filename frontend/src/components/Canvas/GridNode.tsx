@@ -1,7 +1,8 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
+import { NodeHandles } from './NodeHandles';
+import { ProtocolBadge, type ProtocolInfo } from './ProtocolBadge';
 
 interface GridNodeData extends Record<string, unknown> {
   state?: DeviceState;
@@ -9,7 +10,7 @@ interface GridNodeData extends Record<string, unknown> {
   onClick?: () => void;
 }
 
-type GridNodeType = Node<GridNodeData, 'grid'>;
+type GridNodeType = Node<GridNodeData & ProtocolInfo, 'grid'>;
 
 export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) => {
   const s = data.state;
@@ -29,11 +30,8 @@ export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) 
       className={`device-node grid-node ${selected ? 'selected' : ''}`}
       onClick={data.onClick}
     >
-      {/* Handles on all 4 sides for flexible wiring */}
-      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
-      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
+      {/* 12 handles at 25%/50%/75% on all 4 edges for free-form connections */}
+      <NodeHandles />
       <div className="node-header">
         <span className="node-icon">⚡</span>
         <span className="node-title">{data.label}</span>
@@ -67,6 +65,14 @@ export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) 
           </div>
         )}
       </div>
+      <ProtocolBadge
+        modbusPort={data.modbusPort}
+        modbusSlave={data.modbusSlave}
+        modbusMode={data.modbusMode as string | undefined}
+        modbusSerial={data.modbusSerial as string | undefined}
+        modbusBaud={data.modbusBaud as number | undefined}
+        modbusParity={data.modbusParity as string | undefined}
+      />
       <div className="node-type-badge">电网</div>
     </div>
   );

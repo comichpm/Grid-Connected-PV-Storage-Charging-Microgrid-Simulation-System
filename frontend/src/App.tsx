@@ -118,6 +118,7 @@ const App: React.FC = () => {
         <div className="canvas-area">
           <MicrogridCanvas
             deviceStates={deviceStates}
+            deviceList={deviceList}
             onNodeClick={handleNodeClick}
             onDevicesChange={refreshDevices}
           />

@@ -326,7 +326,7 @@ export const DeviceConfigPanel: React.FC<DeviceConfigPanelProps> = ({
 
   const renderSmartMeterConfig = () => {
     const monitored = (editConfig.monitored_device_ids as string[]) || [];
-    const otherDevices = deviceList.filter(d => d.id !== device.id && d.device_type !== 'smart_meter');
+    const otherDevices = (deviceList as DeviceInfo[]).filter((d: DeviceInfo) => d.id !== device.id && d.device_type !== 'smart_meter');
     const isAutoMode = monitored.length === 0;
 
     const toggleDevice = (id: string) => {

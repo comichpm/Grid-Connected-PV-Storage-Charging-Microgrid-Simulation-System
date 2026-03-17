@@ -21,7 +21,7 @@ import { BESSNode } from './BESSNode';
 import { EVChargerNode } from './EVChargerNode';
 import { LoadNode } from './LoadNode';
 import { SmartMeterNode } from './SmartMeterNode';
-import type { DeviceState, DeviceType } from '../../types';
+import type { DeviceState, DeviceType, DeviceInfo } from '../../types';
 import { createDevice, deleteDevice, saveTopology } from '../../services/api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,12 +36,14 @@ const nodeTypes: NodeTypes = {
 
 interface MicrogridCanvasProps {
   deviceStates: Record<string, DeviceState>;
+  deviceList?: DeviceInfo[];
   onNodeClick: (deviceId: string) => void;
   onDevicesChange: () => void;
 }
 
 export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
   deviceStates,
+  deviceList = [],
   onNodeClick,
   onDevicesChange,
 }) => {
@@ -99,6 +101,12 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
             deviceType,
             label: device.name,
             state: device.state,
+            modbusPort: device.modbus_port,
+            modbusSlave: device.modbus_slave_id,
+            modbusMode: (device.config?.modbus_mode as string) ?? 'tcp',
+            modbusSerial: (device.config?.modbus_serial_port as string) ?? '',
+            modbusBaud: (device.config?.modbus_baud_rate as number) ?? 9600,
+            modbusParity: (device.config?.modbus_parity as string) ?? 'N',
             onClick: () => onNodeClick(device.id),
           },
         };
@@ -131,6 +139,30 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
       })
     );
   }, [deviceStates, setNodes]);
+
+  // Sync Modbus / protocol info when deviceList changes (e.g. after config save)
+  React.useEffect(() => {
+    if (!deviceList.length) return;
+    const infoMap = new Map<string, DeviceInfo>(deviceList.map((d: DeviceInfo) => [d.id, d]));
+    setNodes((nds: Node[]) =>
+      nds.map((node: Node) => {
+        const info = infoMap.get(node.id);
+        if (!info) return node;
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            modbusPort: info.modbus_port,
+            modbusSlave: info.modbus_slave_id,
+            modbusMode: (info.config?.modbus_mode as string) ?? 'tcp',
+            modbusSerial: (info.config?.modbus_serial_port as string) ?? '',
+            modbusBaud: (info.config?.modbus_baud_rate as number) ?? 9600,
+            modbusParity: (info.config?.modbus_parity as string) ?? 'N',
+          },
+        };
+      })
+    );
+  }, [deviceList, setNodes]);
 
   const onNodesDelete = useCallback(
     async (deleted: Node[]) => {

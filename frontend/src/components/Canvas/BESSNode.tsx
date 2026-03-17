@@ -1,7 +1,8 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
+import { NodeHandles } from './NodeHandles';
+import { ProtocolBadge, type ProtocolInfo } from './ProtocolBadge';
 
 interface BESSNodeData extends Record<string, unknown> {
   state?: DeviceState;
@@ -9,7 +10,7 @@ interface BESSNodeData extends Record<string, unknown> {
   onClick?: () => void;
 }
 
-type BESSNodeType = Node<BESSNodeData, 'bess'>;
+type BESSNodeType = Node<BESSNodeData & ProtocolInfo, 'bess'>;
 
 const MODE_LABELS: Record<number, string> = { 0: '待机', 1: '充电', 2: '放电' };
 const MODE_COLORS: Record<number, string> = {
@@ -29,10 +30,7 @@ export const BESSNode: React.FC<NodeProps<BESSNodeType>> = ({ data, selected }) 
       className={`device-node bess-node ${selected ? 'selected' : ''}`}
       onClick={data.onClick}
     >
-      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
-      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
+      <NodeHandles />
       <div className="node-header">
         <span className="node-icon">🔋</span>
         <span className="node-title">{data.label}</span>
@@ -70,6 +68,14 @@ export const BESSNode: React.FC<NodeProps<BESSNodeType>> = ({ data, selected }) 
           <span>{(s?.battery_temp_c ?? 25).toFixed(1)} °C</span>
         </div>
       </div>
+      <ProtocolBadge
+        modbusPort={data.modbusPort}
+        modbusSlave={data.modbusSlave}
+        modbusMode={data.modbusMode as string | undefined}
+        modbusSerial={data.modbusSerial as string | undefined}
+        modbusBaud={data.modbusBaud as number | undefined}
+        modbusParity={data.modbusParity as string | undefined}
+      />
       <div className="node-type-badge">储能</div>
     </div>
   );

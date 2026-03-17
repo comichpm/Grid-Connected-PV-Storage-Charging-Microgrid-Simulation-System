@@ -1,7 +1,8 @@
 import React from 'react';
-import { Handle, Position } from '@xyflow/react';
 import type { NodeProps, Node } from '@xyflow/react';
 import type { DeviceState } from '../../types';
+import { NodeHandles } from './NodeHandles';
+import { ProtocolBadge, type ProtocolInfo } from './ProtocolBadge';
 
 interface EVChargerNodeData extends Record<string, unknown> {
   state?: DeviceState;
@@ -9,7 +10,7 @@ interface EVChargerNodeData extends Record<string, unknown> {
   onClick?: () => void;
 }
 
-type EVChargerNodeType = Node<EVChargerNodeData, 'ev_charger'>;
+type EVChargerNodeType = Node<EVChargerNodeData & ProtocolInfo, 'ev_charger'>;
 
 const CHARGE_STATUS: Record<number, string> = {
   0: '空闲',
@@ -29,10 +30,7 @@ export const EVChargerNode: React.FC<NodeProps<EVChargerNodeType>> = ({ data, se
       className={`device-node ev-node ${selected ? 'selected' : ''}`}
       onClick={data.onClick}
     >
-      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
-      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
-      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
+      <NodeHandles />
       <div className="node-header">
         <span className="node-icon">🔌</span>
         <span className="node-title">{data.label}</span>
@@ -75,6 +73,14 @@ export const EVChargerNode: React.FC<NodeProps<EVChargerNodeType>> = ({ data, se
           <span>{(s?.session_energy_kwh ?? 0).toFixed(2)} kWh</span>
         </div>
       </div>
+      <ProtocolBadge
+        modbusPort={data.modbusPort}
+        modbusSlave={data.modbusSlave}
+        modbusMode={data.modbusMode as string | undefined}
+        modbusSerial={data.modbusSerial as string | undefined}
+        modbusBaud={data.modbusBaud as number | undefined}
+        modbusParity={data.modbusParity as string | undefined}
+      />
       <div className="node-type-badge">充电桩</div>
     </div>
   );
