@@ -6,13 +6,14 @@ import { DevicePalette } from './components/Sidebar/DevicePalette';
 import { DeviceConfigPanel } from './components/Sidebar/DeviceConfigPanel';
 import { SimulationToolbar } from './components/Toolbar/SimulationToolbar';
 import type { DeviceState, PowerBalance, DeviceInfo } from './types';
-import { getDevices, getSimulationStatus } from './services/api';
+import { getDevices, getSimulationStatus, setSimulationStep } from './services/api';
 
 const App: React.FC = () => {
   const { lastUpdate, connected } = useWebSocket();
   const { simState, setSimState, loading, start, pause, resume, stop, setSpeed } =
     useSimulation('stopped');
   const [speed, setSpeedLocal] = useState(60);
+  const [stepSeconds, setStepLocal] = useState(1.0);
   const [deviceStates, setDeviceStates] = useState<Record<string, DeviceState>>({});
   const [powerBalance, setPowerBalance] = useState<PowerBalance | null>(null);
   const [simTimeHours, setSimTimeHours] = useState(0);
@@ -88,6 +89,11 @@ const App: React.FC = () => {
     [setSpeed]
   );
 
+  const handleStepChange = useCallback(async (s: number) => {
+    setStepLocal(s);
+    await setSimulationStep(s);
+  }, []);
+
   return (
     <div className="app-container">
       <SimulationToolbar
@@ -101,7 +107,9 @@ const App: React.FC = () => {
         onResume={resume}
         onStop={stop}
         onSpeedChange={handleSpeedChange}
+        onStepChange={handleStepChange}
         currentSpeed={speed}
+        currentStep={stepSeconds}
       />
       <div className="app-body">
         <div className="sidebar-left">
@@ -123,6 +131,7 @@ const App: React.FC = () => {
                 setSelectedDevice(null);
               }}
               onUpdate={refreshDevices}
+              deviceList={deviceList}
             />
           </div>
         )}

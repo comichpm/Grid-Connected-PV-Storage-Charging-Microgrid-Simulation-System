@@ -9,11 +9,13 @@ def calculate_power_balance(devices: List[BaseDevice]) -> Tuple[float, Dict[str,
     """Calculate system power balance and set the grid device power.
 
     Power sign convention:
-      +kW  → device consuming from bus (loads, EV chargers, BESS charging)
-      -kW  → device injecting to bus (PV, BESS discharging)
+      +kW  -> device consuming from bus (loads, EV chargers, BESS charging)
+      -kW  -> device injecting to bus  (PV, BESS discharging)
 
     The grid power is set so that the algebraic sum of ALL device powers = 0.
-    i.e., grid_power = -Σ(non_grid_powers)
+    i.e., grid_power = -Sigma(non_grid_powers)
+
+    smart_meter devices are transparent (zero power) and not counted.
 
     Returns:
         (grid_power_kw, summary_dict)
@@ -29,13 +31,15 @@ def calculate_power_balance(devices: List[BaseDevice]) -> Tuple[float, Dict[str,
         if device.device_type == "grid":
             grid_device = device  # type: ignore[assignment]
         elif device.device_type == "pv":
-            pv_total += device.power_kw  # negative (generation)
+            pv_total += device.power_kw          # negative (generation)
         elif device.device_type == "bess":
-            bess_net += device.power_kw  # signed
+            bess_net += device.power_kw           # signed
         elif device.device_type == "ev_charger":
-            ev_total += device.power_kw  # positive (consumption)
+            ev_total += device.power_kw           # positive (consumption)
         elif device.device_type == "load":
-            load_total += device.power_kw  # positive (consumption)
+            load_total += device.power_kw         # positive (consumption)
+        elif device.device_type == "smart_meter":
+            pass  # transparent – no power contribution
         else:
             other_total += device.power_kw
 
@@ -56,11 +60,11 @@ def calculate_power_balance(devices: List[BaseDevice]) -> Tuple[float, Dict[str,
     balance_error = non_grid_sum + grid_power  # should be 0
 
     summary = {
-        "pv_total_kw": round(-pv_total, 3),         # reported as positive generation
-        "bess_net_kw": round(bess_net, 3),           # + = charging, - = discharging
+        "pv_total_kw": round(-pv_total, 3),        # reported as positive generation
+        "bess_net_kw": round(bess_net, 3),          # + = charging, - = discharging
         "load_total_kw": round(load_total, 3),
         "ev_total_kw": round(ev_total, 3),
-        "grid_power_kw": round(grid_power, 3),
+        "grid_power_kw": round(grid_power, 3),      # + = import (grid->load), - = export
         "balance_error_kw": round(balance_error, 6),
     }
 

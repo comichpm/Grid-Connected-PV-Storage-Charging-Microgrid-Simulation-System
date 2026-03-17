@@ -64,6 +64,9 @@ export const stopSimulation = () =>
 export const setSimulationSpeed = (multiplier: number) =>
   api.post('/simulation/speed', { multiplier }).then((r) => r.data);
 
+export const setSimulationStep = (seconds: number) =>
+  api.post('/simulation/step', { seconds }).then((r) => r.data);
+
 // Topology
 export const getTopology = () =>
   api.get('/topology/').then((r) => r.data);

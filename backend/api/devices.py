@@ -12,6 +12,7 @@ from backend.devices.pv import PVDevice
 from backend.devices.bess import BESSDevice
 from backend.devices.ev_charger import EVChargerDevice
 from backend.devices.load import LoadDevice
+from backend.devices.smart_meter import SmartMeterDevice
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ _DEVICE_FACTORIES = {
     "bess": BESSDevice,
     "ev_charger": EVChargerDevice,
     "load": LoadDevice,
+    "smart_meter": SmartMeterDevice,
 }
 
 # Runtime metadata (position etc.) stored separately from the device objects
@@ -122,6 +124,9 @@ async def update_device(device_id: str, data: DeviceUpdate, request: Request):
     if data.config is not None:
         device.config.update(data.config)
         engine.update_device_config(device_id, data.config)
+        # Check if modbus_mode changed -> need to restart server
+        if "modbus_mode" in data.config or "modbus_serial_port" in data.config:
+            modbus_changed = True
     if data.position_x is not None:
         meta["position_x"] = data.position_x
     if data.position_y is not None:
@@ -156,7 +161,7 @@ async def delete_device(device_id: str, request: Request):
 
 @router.post("/{device_id}/control")
 async def control_device(device_id: str, command: Dict[str, Any], request: Request):
-    """Send a control command directly to a device (convenience endpoint)."""
+    """Send a control command directly to a device."""
     engine = _get_engine(request)
     device = engine.get_device(device_id)
     if device is None:
@@ -172,6 +177,9 @@ async def control_device(device_id: str, command: Dict[str, Any], request: Reque
         value = command.get("value")
         if param and hasattr(device, param):
             setattr(device, param, value)
+            # Re-wire smart meters if monitored_device_ids changed
+            if device.device_type == "smart_meter":
+                engine._wire_smart_meters()
     else:
         raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
 

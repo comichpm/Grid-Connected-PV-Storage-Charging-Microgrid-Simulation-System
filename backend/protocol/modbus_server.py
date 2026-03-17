@@ -1,68 +1,135 @@
-"""Modbus TCP Server manager – one server per device."""
+"""Modbus server manager – TCP and RTU (serial) per device.
+
+Each device can independently use Modbus TCP or Modbus RTU (serial).
+RTU requires a real or virtual serial port (e.g. /dev/ttyUSB0 or
+socat-created pseudo-tty pairs for testing).
+"""
 
 import asyncio
 import logging
 from typing import Dict, Optional
 
-from pymodbus.datastore import ModbusSequentialDataBlock, ModbusDeviceContext, ModbusServerContext
+from pymodbus.datastore import (
+    ModbusSequentialDataBlock,
+    ModbusDeviceContext,
+    ModbusServerContext,
+)
 from pymodbus.server import StartAsyncTcpServer
 from pymodbus import ModbusDeviceIdentification
 
 logger = logging.getLogger(__name__)
 
+# Try to import serial server (requires pyserial)
+try:
+    from pymodbus.server import StartAsyncSerialServer
+    _SERIAL_AVAILABLE = True
+except ImportError:
+    _SERIAL_AVAILABLE = False
+    logger.warning("pymodbus serial server not available – RTU mode will be disabled")
+
+
+def _build_context(device_ref, slave_id: int):
+    """Create a Modbus server context with 100 holding registers for a device."""
+    datablock = ModbusSequentialDataBlock(0, [0] * 100)
+    device_ctx = ModbusDeviceContext(hr=datablock)
+    device_ref.set_modbus_datablock(datablock)
+    return ModbusServerContext(devices={slave_id: device_ctx}, single=False), datablock
+
+
+def _build_identity(device_id: str, device_name: str) -> ModbusDeviceIdentification:
+    identity = ModbusDeviceIdentification()
+    identity.VendorName = "MicrogridSim"
+    identity.ProductCode = device_id
+    identity.ProductName = device_name
+    return identity
+
 
 class DeviceModbusServer:
-    """Manages a single async Modbus TCP server for one device."""
+    """Manages a single async Modbus server (TCP or RTU) for one device."""
 
-    def __init__(self, device_id: str, host: str, port: int, slave_id: int, device_ref):
+    def __init__(self, device_id: str, device_ref, host: str = "0.0.0.0"):
         self.device_id = device_id
-        self.host = host
-        self.port = port
-        self.slave_id = slave_id
         self.device_ref = device_ref
+        self.host = host
 
         self._task: Optional[asyncio.Task] = None
         self._datablock: Optional[ModbusSequentialDataBlock] = None
-        self._context: Optional[ModbusServerContext] = None
-
-    def _build_context(self) -> ModbusServerContext:
-        # 100 holding registers starting at address 0
-        self._datablock = ModbusSequentialDataBlock(0, [0] * 100)
-        device_ctx = ModbusDeviceContext(hr=self._datablock)
-        self.device_ref.set_modbus_datablock(self._datablock)
-        return ModbusServerContext(devices={self.slave_id: device_ctx}, single=False)
 
     async def start(self) -> None:
-        """Start the Modbus TCP server in a background task."""
         if self._task is not None:
             return
 
-        context = self._build_context()
+        mode = getattr(self.device_ref, "modbus_mode", "tcp")
+        context, self._datablock = _build_context(self.device_ref, self.device_ref.modbus_slave_id)
+        identity = _build_identity(self.device_id, self.device_ref.name)
 
-        identity = ModbusDeviceIdentification()
-        identity.VendorName = "MicrogridSim"
-        identity.ProductCode = self.device_id
-        identity.ProductName = self.device_ref.name
+        if mode == "rtu":
+            await self._start_rtu(context, identity)
+        else:
+            await self._start_tcp(context, identity)
+
+    async def _start_tcp(self, context, identity) -> None:
+        port = self.device_ref.modbus_port
 
         async def _run():
             try:
                 await StartAsyncTcpServer(
                     context=context,
                     identity=identity,
-                    address=(self.host, self.port),
+                    address=(self.host, port),
                 )
             except asyncio.CancelledError:
                 pass
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Modbus server %s on port %d error: %s",
-                               self.device_id, self.port, exc)
+                logger.warning("Modbus TCP server %s on port %d error: %s",
+                               self.device_id, port, exc)
 
         self._task = asyncio.ensure_future(_run())
         logger.info("Modbus TCP server started for device %s on %s:%d (slave=%d)",
-                    self.device_id, self.host, self.port, self.slave_id)
+                    self.device_id, self.host, port, self.device_ref.modbus_slave_id)
+
+    async def _start_rtu(self, context, identity) -> None:
+        if not _SERIAL_AVAILABLE:
+            logger.error(
+                "RTU requested for device %s but pymodbus serial server is not available",
+                self.device_id,
+            )
+            return
+
+        serial_port = getattr(self.device_ref, "modbus_serial_port", "/dev/ttyUSB0")
+        baud_rate = getattr(self.device_ref, "modbus_baud_rate", 9600)
+        parity = getattr(self.device_ref, "modbus_parity", "N")
+        stopbits = getattr(self.device_ref, "modbus_stopbits", 1)
+        bytesize = getattr(self.device_ref, "modbus_bytesize", 8)
+
+        async def _run():
+            try:
+                await StartAsyncSerialServer(
+                    context=context,
+                    identity=identity,
+                    port=serial_port,
+                    baudrate=baud_rate,
+                    parity=parity,
+                    stopbits=stopbits,
+                    bytesize=bytesize,
+                    framer="rtu",
+                    timeout=1,
+                )
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Modbus RTU server %s on %s error: %s",
+                    self.device_id, serial_port, exc,
+                )
+
+        self._task = asyncio.ensure_future(_run())
+        logger.info(
+            "Modbus RTU server started for device %s on %s (baud=%d, slave=%d)",
+            self.device_id, serial_port, baud_rate, self.device_ref.modbus_slave_id,
+        )
 
     async def stop(self) -> None:
-        """Stop the Modbus TCP server."""
         if self._task is not None:
             self._task.cancel()
             try:
@@ -79,28 +146,24 @@ class DeviceModbusServer:
 
 
 class ModbusServerManager:
-    """Manages all per-device Modbus TCP servers."""
+    """Manages all per-device Modbus servers (TCP + RTU)."""
 
     def __init__(self, host: str = "0.0.0.0"):
         self.host = host
         self._servers: Dict[str, DeviceModbusServer] = {}
 
     async def add_device(self, device) -> None:
-        """Create and start a Modbus server for the given device."""
         if device.device_id in self._servers:
             await self.remove_device(device.device_id)
 
         server = DeviceModbusServer(
             device_id=device.device_id,
-            host=self.host,
-            port=device.modbus_port,
-            slave_id=device.modbus_slave_id,
             device_ref=device,
+            host=self.host,
         )
         self._servers[device.device_id] = server
         await server.start()
-        # Small delay to allow the socket to bind
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0.05)
 
     async def remove_device(self, device_id: str) -> None:
         server = self._servers.pop(device_id, None)
@@ -108,7 +171,6 @@ class ModbusServerManager:
             await server.stop()
 
     async def update_device(self, device) -> None:
-        """Restart Modbus server for a device (e.g. port changed)."""
         await self.remove_device(device.device_id)
         await self.add_device(device)
 

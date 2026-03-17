@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 class GridDevice(BaseDevice):
     """Simulates the grid connection point (Slack Bus).
 
-    Power convention:
-      +kW  → importing from grid (grid is supplying)
-      -kW  → exporting to grid   (grid is absorbing)
+    Power convention (Req 1):
+      +kW  → grid supplying power to local loads  (import from grid, positive)
+      -kW  → local generation exporting to grid   (export to grid,  negative)
     """
 
     def __init__(self, device_id: str, name: str, config: Dict[str, Any],
@@ -27,13 +27,21 @@ class GridDevice(BaseDevice):
         self.import_price: float = config.get("import_price", 0.85)
         self.export_price: float = config.get("export_price", 0.40)
 
+        # Rated capacity + overload protection (Req 3)
+        self.rated_capacity_kw: float = config.get("rated_capacity_kw", 1000.0)
+        self.overload_threshold_ratio: float = config.get("overload_threshold_ratio", 1.2)
+        self.overload_max_duration_s: float = config.get("overload_max_duration_s", 30.0)
+        self.disconnect_on_overload: bool = config.get("disconnect_on_overload", True)
+        self._overload_timer_s: float = 0.0   # accumulates while overloaded
+
         self.voltage_v = self.voltage_kv * 1000.0
         self.current_a: float = 0.0
 
         self.total_import_kwh: float = 0.0
         self.total_export_kwh: float = 0.0
+        self.overload_count: int = 0          # times tripped on overload
 
-        # Status: 0=offline, 1=importing, 2=exporting, 3=idle
+        # Status: 0=offline, 1=importing, 2=exporting, 3=idle, 4=overload-trip
         self.grid_status: int = 3
 
     # ------------------------------------------------------------------
@@ -49,12 +57,31 @@ class GridDevice(BaseDevice):
 
         dt_hours = dt_seconds / 3600.0
 
+        # Overload protection (Req 3)
+        overload_limit = self.rated_capacity_kw * self.overload_threshold_ratio
+        if abs(self.power_kw) > overload_limit and self.disconnect_on_overload:
+            self._overload_timer_s += dt_seconds
+            if self._overload_timer_s >= self.overload_max_duration_s:
+                logger.warning(
+                    "Grid %s: overload %.1f kW > %.1f kW for %.1f s – disconnecting",
+                    self.device_id, abs(self.power_kw), overload_limit,
+                    self._overload_timer_s,
+                )
+                self.online = False
+                self.power_kw = 0.0
+                self.grid_status = 4  # overload trip
+                self.overload_count += 1
+                self._overload_timer_s = 0.0
+                return
+        else:
+            self._overload_timer_s = max(0.0, self._overload_timer_s - dt_seconds * 0.5)
+
         if self.power_kw > 0:
-            # Importing
+            # Importing (grid supplying load)
             self.grid_status = 1
             self.total_import_kwh += self.power_kw * dt_hours
         elif self.power_kw < 0:
-            # Exporting
+            # Exporting (user generation to grid)
             self.grid_status = 2
             self.total_export_kwh += abs(self.power_kw) * dt_hours
         else:
@@ -84,22 +111,33 @@ class GridDevice(BaseDevice):
             "export_price": self.export_price,
             "max_import_kw": self.max_import_kw,
             "max_export_kw": self.max_export_kw,
+            "rated_capacity_kw": self.rated_capacity_kw,
+            "overload_threshold_ratio": self.overload_threshold_ratio,
+            "overload_max_duration_s": self.overload_max_duration_s,
+            "disconnect_on_overload": self.disconnect_on_overload,
+            "overload_timer_s": round(self._overload_timer_s, 2),
+            "overload_count": self.overload_count,
         }
 
     def _build_registers(self) -> None:
-        # Register map (address → value)
+        # Register map (address -> value)
         # 0: online status (0/1)
-        # 1: grid status (0=offline,1=import,2=export,3=idle)
-        # 2: power kW ×10 (signed)
-        # 3: voltage V ×10
-        # 4: current A ×10
-        # 5: frequency Hz ×100
+        # 1: grid status (0=offline,1=import,2=export,3=idle,4=overload-trip)
+        # 2: power kW x10 (signed, +import -export)
+        # 3: voltage V x10
+        # 4: current A x10
+        # 5: frequency Hz x100
         # 6: total import kWh (integer)
         # 7: total export kWh (integer)
-        # 8: import price ×100
-        # 9: export price ×100
-        # 10: max import kW ×10
-        # 11: max export kW ×10
+        # 8: import price x100
+        # 9: export price x100
+        # 10: max import kW x10
+        # 11: max export kW x10
+        # 12: rated capacity kW x10
+        # 13: overload threshold ratio x100
+        # 14: overload max duration s x10
+        # 15: overload timer s x10
+        # 16: overload count
         regs = self._registers
         regs[0] = 1 if self.online else 0
         regs[1] = self.grid_status
@@ -113,6 +151,11 @@ class GridDevice(BaseDevice):
         regs[9] = self._to_reg(self.export_price, 100.0)
         regs[10] = self._to_reg(self.max_import_kw, 10.0)
         regs[11] = self._to_reg(self.max_export_kw, 10.0)
+        regs[12] = self._to_reg(self.rated_capacity_kw, 10.0)
+        regs[13] = self._to_reg(self.overload_threshold_ratio, 100.0)
+        regs[14] = self._to_reg(self.overload_max_duration_s, 10.0)
+        regs[15] = self._to_reg(self._overload_timer_s, 10.0)
+        regs[16] = self.overload_count
 
     def handle_modbus_write(self, address: int, values: List[int]) -> None:
         """Handle external Modbus write commands."""
@@ -120,7 +163,16 @@ class GridDevice(BaseDevice):
             addr = address + i
             if addr == 0:
                 self.online = bool(val)
+                if self.online:
+                    self.grid_status = 3
+                    self._overload_timer_s = 0.0
             elif addr == 10:
                 self.max_import_kw = self._from_reg(val, 10.0)
             elif addr == 11:
                 self.max_export_kw = self._from_reg(val, 10.0)
+            elif addr == 12:
+                self.rated_capacity_kw = self._from_reg(val, 10.0)
+            elif addr == 13:
+                self.overload_threshold_ratio = self._from_reg(val, 100.0)
+            elif addr == 14:
+                self.overload_max_duration_s = self._from_reg(val, 10.0)

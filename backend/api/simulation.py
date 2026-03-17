@@ -14,6 +14,10 @@ class SpeedRequest(BaseModel):
     multiplier: float
 
 
+class StepRequest(BaseModel):
+    seconds: float  # real-time update interval (0.1 – 10.0 s)
+
+
 @router.get("/status")
 async def get_status(request: Request):
     engine = request.app.state.engine
@@ -53,3 +57,11 @@ async def set_speed(data: SpeedRequest, request: Request):
     engine = request.app.state.engine
     engine.set_speed(data.multiplier)
     return {"speed_multiplier": engine.speed_multiplier}
+
+
+@router.post("/step")
+async def set_step(data: StepRequest, request: Request):
+    """Set real-time update interval (Req 9 – minimum 100 ms)."""
+    engine = request.app.state.engine
+    engine.set_step(data.seconds)
+    return {"step_seconds": engine.step_seconds}

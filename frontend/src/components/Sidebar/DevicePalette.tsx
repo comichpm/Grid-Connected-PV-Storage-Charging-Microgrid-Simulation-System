@@ -19,7 +19,7 @@ const DEVICE_TEMPLATES: DeviceTemplate[] = [
     type: 'pv',
     label: '光伏逆变器',
     icon: '☀️',
-    description: '根据辐照度生成功率',
+    description: '支持天气模式/自定义曲线',
   },
   {
     type: 'bess',
@@ -37,7 +37,13 @@ const DEVICE_TEMPLATES: DeviceTemplate[] = [
     type: 'load',
     label: '负荷',
     icon: '💡',
-    description: '支持恒定/日曲线/随机模式',
+    description: '恒定/日曲线/随机/感性/容性/冲击/电机',
+  },
+  {
+    type: 'smart_meter',
+    label: '智能仪表',
+    icon: '📊',
+    description: '多设备功率聚合，支持Modbus RTU/TCP',
   },
 ];
 

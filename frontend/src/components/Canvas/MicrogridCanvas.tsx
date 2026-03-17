@@ -19,6 +19,7 @@ import { PVNode } from './PVNode';
 import { BESSNode } from './BESSNode';
 import { EVChargerNode } from './EVChargerNode';
 import { LoadNode } from './LoadNode';
+import { SmartMeterNode } from './SmartMeterNode';
 import type { DeviceState, DeviceType } from '../../types';
 import { createDevice, deleteDevice, saveTopology } from '../../services/api';
 
@@ -29,6 +30,7 @@ const nodeTypes: NodeTypes = {
   bess: BESSNode as NodeTypes[string],
   ev_charger: EVChargerNode as NodeTypes[string],
   load: LoadNode as NodeTypes[string],
+  smart_meter: SmartMeterNode as NodeTypes[string],
 };
 
 interface MicrogridCanvasProps {
@@ -73,6 +75,7 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
         bess: 5022,
         ev_charger: 5023,
         load: 5024,
+        smart_meter: 5025,
       };
 
       try {

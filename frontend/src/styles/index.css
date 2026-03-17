@@ -648,3 +648,113 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* ---- Smart Meter Node ---- */
+.smart-meter-node {
+  border-color: #0d9488;
+  background: #0a1628;
+  padding: 8px 12px;
+  text-align: center;
+}
+
+.smart-meter-node:hover {
+  border-color: #14b8a6;
+  box-shadow: 0 0 12px rgba(20, 184, 166, 0.35);
+}
+
+.smart-meter-node .node-icon {
+  font-size: 22px;
+  margin-bottom: 2px;
+}
+
+.smart-meter-node .node-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8f0;
+  margin-bottom: 4px;
+}
+
+.smart-meter-node .node-status {
+  font-size: 11px;
+}
+
+.smart-meter-node .node-status-row {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* ---- Config Panel: subsections and status ---- */
+.config-subsection {
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border: 1px solid #1e293b;
+}
+
+.subsection-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.status-section {
+  padding: 8px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 6px;
+  border: 1px solid #312e81;
+  margin-bottom: 8px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.status-key {
+  color: #94a3b8;
+}
+
+.status-val {
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+/* ---- Input enhancements ---- */
+.input-row select {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  min-width: 130px;
+}
+
+.input-row select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.input-unit {
+  font-size: 11px;
+  color: #64748b;
+  margin-left: 4px;
+}
+
+.hint-text {
+  font-size: 11px;
+  color: #64748b;
+  padding: 4px 0;
+}
+
+/* ---- Grid power direction indicator ---- */
+.ps-item.grid {
+  font-weight: 600;
+}

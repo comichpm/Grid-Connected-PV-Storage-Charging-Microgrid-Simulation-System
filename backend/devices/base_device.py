@@ -17,6 +17,8 @@ class BaseDevice(ABC):
 
     The Grid device is the Slack Bus and its power is set by the engine
     to balance the system.
+
+    Modbus supports both TCP and RTU (serial) modes, selectable per device.
     """
 
     def __init__(self, device_id: str, name: str, device_type: str,
@@ -27,6 +29,15 @@ class BaseDevice(ABC):
         self.config = config.copy()
         self.modbus_port = modbus_port
         self.modbus_slave_id = modbus_slave_id
+
+        # Modbus mode: "tcp" or "rtu"
+        self.modbus_mode: str = config.get("modbus_mode", "tcp")
+        # RTU serial settings (used when modbus_mode == "rtu")
+        self.modbus_serial_port: str = config.get("modbus_serial_port", "/dev/ttyUSB0")
+        self.modbus_baud_rate: int = int(config.get("modbus_baud_rate", 9600))
+        self.modbus_parity: str = config.get("modbus_parity", "N")
+        self.modbus_stopbits: int = int(config.get("modbus_stopbits", 1))
+        self.modbus_bytesize: int = int(config.get("modbus_bytesize", 8))
 
         # Common state
         self.online: bool = True
@@ -91,13 +102,13 @@ class BaseDevice(ABC):
 
     @staticmethod
     def _to_reg(value: float, scale: float = 10.0) -> int:
-        """Convert float → unsigned 16-bit register (multiply by scale)."""
+        """Convert float to unsigned 16-bit register (multiply by scale)."""
         raw = int(round(value * scale))
         return max(0, min(0xFFFF, raw))
 
     @staticmethod
     def _signed_to_reg(value: float, scale: float = 10.0) -> int:
-        """Convert signed float → 16-bit two's-complement register."""
+        """Convert signed float to 16-bit two's-complement register."""
         raw = int(round(value * scale))
         raw = max(-32768, min(32767, raw))
         return raw & 0xFFFF

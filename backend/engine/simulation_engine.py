@@ -1,4 +1,4 @@
-"""Simulation engine – main async loop."""
+"""Simulation engine - main async loop."""
 
 import asyncio
 import time
@@ -7,6 +7,8 @@ from typing import Dict, List, Callable, Awaitable, Any, Optional
 
 from backend.config import (
     SIMULATION_STEP_SECONDS,
+    SIMULATION_MIN_STEP_SECONDS,
+    SIMULATION_MAX_STEP_SECONDS,
     SIMULATION_SPEED_MULTIPLIER,
     SIMULATION_START_HOUR,
 )
@@ -26,7 +28,7 @@ class SimulationEngine:
     The engine:
     1. Advances simulation time.
     2. Updates all non-grid devices.
-    3. Runs power balance → sets grid power.
+    3. Runs power balance -> sets grid power.
     4. Updates grid device.
     5. Syncs Modbus registers for all devices.
     6. Calls registered WebSocket broadcast callbacks.
@@ -36,7 +38,7 @@ class SimulationEngine:
         self.state: str = SIM_STATE_STOPPED
         self.sim_time_hours: float = SIMULATION_START_HOUR
         self.speed_multiplier: float = SIMULATION_SPEED_MULTIPLIER
-        self.step_seconds: float = SIMULATION_STEP_SECONDS
+        self.step_seconds: float = SIMULATION_STEP_SECONDS  # real-time cadence
 
         self.devices: Dict[str, BaseDevice] = {}
         self._ws_callbacks: List[Callable[[Dict[str, Any]], Awaitable[None]]] = []
@@ -51,9 +53,18 @@ class SimulationEngine:
 
     def add_device(self, device: BaseDevice) -> None:
         self.devices[device.device_id] = device
+        # Wire smart meter to devices registry
+        self._wire_smart_meters()
 
     def remove_device(self, device_id: str) -> None:
         self.devices.pop(device_id, None)
+        self._wire_smart_meters()
+
+    def _wire_smart_meters(self) -> None:
+        """Give each smart meter a reference to the devices dict."""
+        for device in self.devices.values():
+            if device.device_type == "smart_meter":
+                device.set_devices_registry(self.devices)  # type: ignore[attr-defined]
 
     def get_device(self, device_id: str) -> Optional[BaseDevice]:
         return self.devices.get(device_id)
@@ -62,10 +73,12 @@ class SimulationEngine:
         device = self.devices.get(device_id)
         if device is not None:
             device.config.update(config)
-            # Re-apply known config keys
             for key, val in config.items():
                 if hasattr(device, key):
                     setattr(device, key, val)
+            # Re-wire smart meters in case monitored_device_ids changed
+            if device.device_type == "smart_meter":
+                self._wire_smart_meters()
 
     # ------------------------------------------------------------------
     # WebSocket callback registration
@@ -95,7 +108,7 @@ class SimulationEngine:
             self._real_start_time = time.monotonic()
         self.state = SIM_STATE_RUNNING
         self._task = asyncio.ensure_future(self._loop())
-        logger.info("Simulation started")
+        logger.info("Simulation started (step=%.2fs speed=%.1fx)", self.step_seconds, self.speed_multiplier)
 
     async def pause(self) -> None:
         if self.state == SIM_STATE_RUNNING:
@@ -128,6 +141,12 @@ class SimulationEngine:
     def set_speed(self, multiplier: float) -> None:
         self.speed_multiplier = max(1.0, min(3600.0, multiplier))
 
+    def set_step(self, seconds: float) -> None:
+        """Set the real-time update interval (Req 9 – supports down to 100 ms)."""
+        self.step_seconds = max(SIMULATION_MIN_STEP_SECONDS,
+                                min(SIMULATION_MAX_STEP_SECONDS, seconds))
+        logger.info("Simulation step set to %.2f s", self.step_seconds)
+
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
@@ -137,7 +156,7 @@ class SimulationEngine:
             while self.state == SIM_STATE_RUNNING:
                 loop_start = asyncio.get_event_loop().time()
 
-                # Simulation time advance per real step
+                # sim time advance = step * speed (in sim-seconds)
                 sim_dt = self.step_seconds * self.speed_multiplier
 
                 await self._step(sim_dt)
@@ -149,7 +168,6 @@ class SimulationEngine:
                 if self.sim_time_hours >= 24.0:
                     self.sim_time_hours -= 24.0
 
-                # Maintain real-time step cadence
                 elapsed = asyncio.get_event_loop().time() - loop_start
                 sleep_time = max(0.0, self.step_seconds - elapsed)
                 await asyncio.sleep(sleep_time)
@@ -161,24 +179,29 @@ class SimulationEngine:
     async def _step(self, sim_dt_seconds: float) -> None:
         device_list = list(self.devices.values())
 
-        # 1. Update all non-grid devices
+        # 1. Update all non-grid, non-smart-meter devices
         for device in device_list:
-            if device.device_type != "grid":
+            if device.device_type not in ("grid", "smart_meter"):
                 device.update(self.sim_time_hours, sim_dt_seconds)
 
         # 2. Calculate power balance and update grid
         _, power_summary = calculate_power_balance(device_list)
 
-        # 3. Update grid device state (totals)
+        # 3. Update grid device state (totals/protection)
         for device in device_list:
             if device.device_type == "grid":
                 device.update(self.sim_time_hours, sim_dt_seconds)
 
-        # 4. Sync all Modbus registers
+        # 4. Update smart meters (after all devices have their final power_kw)
+        for device in device_list:
+            if device.device_type == "smart_meter":
+                device.update(self.sim_time_hours, sim_dt_seconds)
+
+        # 5. Sync all Modbus registers
         for device in device_list:
             device.sync_modbus_registers()
 
-        # 5. Broadcast via WebSocket
+        # 6. Broadcast via WebSocket
         if self._ws_callbacks:
             payload = self._build_ws_payload(device_list, power_summary)
             for cb in list(self._ws_callbacks):
@@ -208,6 +231,7 @@ class SimulationEngine:
             "state": self.state,
             "sim_time_hours": round(self.sim_time_hours, 4),
             "speed_multiplier": self.speed_multiplier,
+            "step_seconds": self.step_seconds,
             "total_steps": self._total_steps,
             "power_balance": power_summary,
             "devices": [d.get_state_dict() for d in device_list],

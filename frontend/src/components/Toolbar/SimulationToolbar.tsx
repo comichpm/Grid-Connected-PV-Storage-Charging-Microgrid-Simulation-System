@@ -13,7 +13,9 @@ interface SimulationToolbarProps {
   onResume: () => void;
   onStop: () => void;
   onSpeedChange: (speed: number) => void;
+  onStepChange?: (step: number) => void;
   currentSpeed: number;
+  currentStep?: number;
 }
 
 function formatHour(h: number): string {
@@ -33,8 +35,15 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
   onResume,
   onStop,
   onSpeedChange,
+  onStepChange,
   currentSpeed,
+  currentStep = 1.0,
 }) => {
+  // Power direction helper
+  const gridKw = powerBalance?.grid_power_kw ?? 0;
+  const gridLabel = gridKw > 0 ? '取电' : gridKw < 0 ? '送电' : '-';
+  const gridColor = gridKw > 0 ? '#f97316' : gridKw < 0 ? '#34d399' : '#94a3b8';
+
   return (
     <div className="simulation-toolbar">
       <div className="toolbar-left">
@@ -46,46 +55,26 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
 
       <div className="toolbar-center">
         {simState === 'stopped' && (
-          <button
-            className="sim-btn start-btn"
-            onClick={onStart}
-            disabled={loading}
-          >
+          <button className="sim-btn start-btn" onClick={onStart} disabled={loading}>
             ▶ 开始模拟
           </button>
         )}
         {simState === 'running' && (
           <>
-            <button
-              className="sim-btn pause-btn"
-              onClick={onPause}
-              disabled={loading}
-            >
+            <button className="sim-btn pause-btn" onClick={onPause} disabled={loading}>
               ⏸ 暂停
             </button>
-            <button
-              className="sim-btn stop-btn"
-              onClick={onStop}
-              disabled={loading}
-            >
+            <button className="sim-btn stop-btn" onClick={onStop} disabled={loading}>
               ⏹ 停止
             </button>
           </>
         )}
         {simState === 'paused' && (
           <>
-            <button
-              className="sim-btn start-btn"
-              onClick={onResume}
-              disabled={loading}
-            >
+            <button className="sim-btn start-btn" onClick={onResume} disabled={loading}>
               ▶ 继续
             </button>
-            <button
-              className="sim-btn stop-btn"
-              onClick={onStop}
-              disabled={loading}
-            >
+            <button className="sim-btn stop-btn" onClick={onStop} disabled={loading}>
               ⏹ 停止
             </button>
           </>
@@ -93,10 +82,7 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
 
         <div className="speed-control">
           <label>速度: </label>
-          <select
-            value={currentSpeed}
-            onChange={(e) => onSpeedChange(Number(e.target.value))}
-          >
+          <select value={currentSpeed} onChange={e => onSpeedChange(Number(e.target.value))}>
             <option value={1}>1×</option>
             <option value={60}>60× (1分/秒)</option>
             <option value={300}>300× (5分/秒)</option>
@@ -105,32 +91,35 @@ export const SimulationToolbar: React.FC<SimulationToolbarProps> = ({
           </select>
         </div>
 
-        {simState !== 'stopped' && (
-          <div className="sim-time">
-            🕐 {formatHour(simTimeHours)}
+        {/* Update interval (Req 9 – down to 100 ms) */}
+        {onStepChange && (
+          <div className="speed-control">
+            <label>刷新: </label>
+            <select value={currentStep} onChange={e => onStepChange(Number(e.target.value))}>
+              <option value={0.1}>100ms</option>
+              <option value={0.2}>200ms</option>
+              <option value={0.5}>500ms</option>
+              <option value={1.0}>1s</option>
+              <option value={2.0}>2s</option>
+              <option value={5.0}>5s</option>
+            </select>
           </div>
+        )}
+
+        {simState !== 'stopped' && (
+          <div className="sim-time">🕐 {formatHour(simTimeHours)}</div>
         )}
       </div>
 
       <div className="toolbar-right">
         {powerBalance && (
           <div className="power-summary">
-            <span className="ps-item pv">
-              ☀️ {powerBalance.pv_total_kw.toFixed(1)} kW
-            </span>
-            <span className="ps-item bess">
-              🔋 {powerBalance.bess_net_kw.toFixed(1)} kW
-            </span>
-            <span className="ps-item load">
-              💡 {powerBalance.load_total_kw.toFixed(1)} kW
-            </span>
-            <span className="ps-item ev">
-              🔌 {powerBalance.ev_total_kw.toFixed(1)} kW
-            </span>
-            <span
-              className={`ps-item grid ${powerBalance.grid_power_kw > 0 ? 'import' : 'export'}`}
-            >
-              ⚡ {powerBalance.grid_power_kw.toFixed(1)} kW
+            <span className="ps-item pv">☀️ {powerBalance.pv_total_kw.toFixed(1)} kW</span>
+            <span className="ps-item bess">🔋 {powerBalance.bess_net_kw.toFixed(1)} kW</span>
+            <span className="ps-item load">💡 {powerBalance.load_total_kw.toFixed(1)} kW</span>
+            <span className="ps-item ev">🔌 {powerBalance.ev_total_kw.toFixed(1)} kW</span>
+            <span className="ps-item grid" style={{ color: gridColor }}>
+              ⚡ {Math.abs(gridKw).toFixed(1)} kW {gridLabel}
             </span>
           </div>
         )}
