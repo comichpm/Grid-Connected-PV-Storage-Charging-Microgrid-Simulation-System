@@ -37,7 +37,10 @@ class LoadDevice(BaseDevice):
 
         self.rated_power_kw: float = config.get("rated_power_kw", 50.0)
         self.load_mode: str = config.get("load_mode", LOAD_MODE_DAILY)
-        self.base_load_ratio: float = config.get("base_load_ratio", 0.3)
+        # base_load_ratio: baseline fraction for daily curve (min level at night)
+        # For constant/inductive/capacitive this is the fixed operating ratio
+        self.base_load_ratio: float = config.get("base_load_ratio", 1.0)
+        # load_adjust_ratio: runtime scaling multiplier (1.0 = no change)
         self.load_adjust_ratio: float = config.get("load_adjust_ratio", 1.0)
 
         # Power factor settings (Req 5 – inductive/capacitive)
@@ -53,7 +56,7 @@ class LoadDevice(BaseDevice):
         # Motor start settings (Req 5)
         self.motor_start_peak_ratio: float = config.get("motor_start_peak_ratio", 6.0)
         self.motor_start_duration_s: float = config.get("motor_start_duration_s", 3.0)
-        self._motor_start_phase: float = -1.0  # -1 = not started yet for this cycle
+        self._motor_start_phase: float = 0.0   # 0 = trigger start immediately on first update
         self.motor_start_interval_s: float = config.get("motor_start_interval_s", 300.0)
         self._motor_cycle_timer: float = 0.0
 
@@ -64,14 +67,22 @@ class LoadDevice(BaseDevice):
         self.apparent_power_kva: float = 0.0
 
     def _daily_curve(self, hour: float) -> float:
-        """Typical commercial building double-peak load profile."""
+        """Typical commercial building double-peak load profile.
+        Returns ratio between 0.2 (night min) and 1.0 (peak).
+        """
+        night_base = 0.2
         morning = math.exp(-((hour - 10.0) ** 2) / (2.0 * 2.0 ** 2))
         afternoon = math.exp(-((hour - 16.0) ** 2) / (2.0 * 2.5 ** 2))
-        curve = self.base_load_ratio + (1.0 - self.base_load_ratio) * max(morning, afternoon)
+        curve = night_base + (1.0 - night_base) * max(morning, afternoon)
         return min(1.0, curve)
 
     def _base_power(self, hour_of_day: float) -> float:
-        """Return base active power (kW) before mode-specific shaping."""
+        """Return base active power (kW) before mode-specific shaping.
+
+        For constant/inductive/capacitive: power = rated_power_kw * base_load_ratio * load_adjust_ratio
+          base_load_ratio=1.0 means full rated power.
+        For daily_curve/impulse/motor: power follows time-of-day curve * load_adjust_ratio.
+        """
         if self.load_mode in (LOAD_MODE_CONSTANT, LOAD_MODE_INDUCTIVE, LOAD_MODE_CAPACITIVE):
             ratio = self.base_load_ratio
         elif self.load_mode in (LOAD_MODE_DAILY, LOAD_MODE_IMPULSE):

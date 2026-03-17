@@ -68,7 +68,18 @@ class SmartMeterDevice(BaseDevice):
         total_reactive = 0.0
         found = 0
 
-        for dev_id in self.monitored_device_ids:
+        # Determine which device IDs to monitor:
+        # If monitored_device_ids is empty, monitor ALL non-grid, non-smart-meter devices.
+        # (Exclude the grid/slack bus since its power is just the balance residual.)
+        if self.monitored_device_ids:
+            target_ids = self.monitored_device_ids
+        else:
+            target_ids = [
+                dev_id for dev_id, dev in self._devices_registry.items()
+                if dev.device_type not in ("smart_meter", "grid")
+            ]
+
+        for dev_id in target_ids:
             dev = self._devices_registry.get(dev_id)
             if dev is None:
                 continue
@@ -107,6 +118,8 @@ class SmartMeterDevice(BaseDevice):
         self.power_kw = 0.0
 
     def get_state_dict(self) -> Dict[str, Any]:
+        # When monitored_device_ids is empty we auto-monitor all non-grid devices
+        monitor_mode = "自动(非电网)" if not self.monitored_device_ids else "自定义"
         return {
             "id": self.device_id,
             "name": self.name,
@@ -121,6 +134,7 @@ class SmartMeterDevice(BaseDevice):
             "total_export_kwh": round(self.total_export_kwh, 3),
             "monitored_device_ids": self.monitored_device_ids,
             "monitored_count": self.monitored_count,
+            "monitor_mode": monitor_mode,
             "measured_voltage_v": round(self.measured_voltage_v, 1),
             "measured_frequency_hz": round(self.measured_frequency_hz, 2),
             "voltage_v": round(self.voltage_v, 1),

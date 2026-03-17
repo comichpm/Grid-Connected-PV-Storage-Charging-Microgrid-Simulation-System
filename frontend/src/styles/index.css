@@ -376,6 +376,10 @@ body {
   color: #fb923c !important;
 }
 
+.value-purple {
+  color: #c084fc !important;
+}
+
 .node-type-badge {
   position: absolute;
   bottom: -1px;

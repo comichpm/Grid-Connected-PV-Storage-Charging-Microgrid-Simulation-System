@@ -7,6 +7,7 @@ import {
   addEdge,
   useNodesState,
   useEdgesState,
+  ConnectionMode,
   type Connection,
   type Node,
   type Edge,
@@ -174,6 +175,7 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
         onDragOver={onDragOver}
         onNodesDelete={onNodesDelete}
         nodeTypes={nodeTypes}
+        connectionMode={ConnectionMode.Loose}
         fitView
         deleteKeyCode="Delete"
       >

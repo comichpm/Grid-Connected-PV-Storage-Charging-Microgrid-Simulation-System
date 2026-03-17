@@ -29,8 +29,10 @@ export const BESSNode: React.FC<NodeProps<BESSNodeType>> = ({ data, selected }) 
       className={`device-node bess-node ${selected ? 'selected' : ''}`}
       onClick={data.onClick}
     >
-      <Handle type="source" position={Position.Right} id="right" />
-      <Handle type="target" position={Position.Left} id="left" />
+      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
+      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
+      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
       <div className="node-header">
         <span className="node-icon">🔋</span>
         <span className="node-title">{data.label}</span>

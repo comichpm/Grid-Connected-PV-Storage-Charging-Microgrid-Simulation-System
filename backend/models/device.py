@@ -74,7 +74,7 @@ class EVChargerConfig(ModbusRTUConfig):
 class LoadConfig(ModbusRTUConfig):
     rated_power_kw: float = 50.0
     load_mode: str = "daily_curve"       # constant|daily_curve|random|inductive|capacitive|impulse|motor_start
-    base_load_ratio: float = 0.3
+    base_load_ratio: float = 1.0         # operating level for constant/inductive/capacitive (1.0=full rated)
     load_adjust_ratio: float = 1.0
     power_factor: float = 0.9            # for inductive/capacitive/motor modes
     # Impulse load (Req 5)

@@ -44,7 +44,10 @@ def calculate_power_balance(devices: List[BaseDevice]) -> Tuple[float, Dict[str,
             other_total += device.power_kw
 
     non_grid_sum = pv_total + bess_net + load_total + ev_total + other_total
-    grid_power = -non_grid_sum  # Grid balances the system
+    # Grid power = non_grid_sum:
+    #   +kW  -> grid supplying local loads (import, positive)
+    #   -kW  -> local generation exporting to grid (export, negative)
+    grid_power = non_grid_sum
 
     if grid_device is not None and grid_device.online:
         # Apply grid import/export limits
@@ -57,7 +60,7 @@ def calculate_power_balance(devices: List[BaseDevice]) -> Tuple[float, Dict[str,
         grid_device.power_kw = 0.0
         grid_power = 0.0
 
-    balance_error = non_grid_sum + grid_power  # should be 0
+    balance_error = non_grid_sum - grid_power  # should be 0
 
     summary = {
         "pv_total_kw": round(-pv_total, 3),        # reported as positive generation

@@ -17,18 +17,23 @@ export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) 
   const statusText = !s?.online
     ? '离线'
     : power > 0.1
-    ? '购电'
+    ? '供电(购电)'
     : power < -0.1
-    ? '售电'
+    ? '上网(售电)'
     : '待机';
+
+  const powerColor = power > 0.1 ? '#f97316' : power < -0.1 ? '#34d399' : '#94a3b8';
 
   return (
     <div
       className={`device-node grid-node ${selected ? 'selected' : ''}`}
       onClick={data.onClick}
     >
-      <Handle type="source" position={Position.Right} id="right" />
-      <Handle type="target" position={Position.Left} id="left" />
+      {/* Handles on all 4 sides for flexible wiring */}
+      <Handle type="source" position={Position.Top}    id="top"    style={{ left: '50%' }} />
+      <Handle type="source" position={Position.Bottom} id="bottom" style={{ left: '50%' }} />
+      <Handle type="source" position={Position.Right}  id="right"  style={{ top: '50%' }} />
+      <Handle type="target" position={Position.Left}   id="left"   style={{ top: '50%' }} />
       <div className="node-header">
         <span className="node-icon">⚡</span>
         <span className="node-title">{data.label}</span>
@@ -39,7 +44,7 @@ export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) 
       <div className="node-body">
         <div className="node-row">
           <span>功率</span>
-          <span className={power < 0 ? 'value-green' : 'value-blue'}>
+          <span style={{ color: powerColor }}>
             {power >= 0 ? '+' : ''}{power.toFixed(1)} kW
           </span>
         </div>
@@ -55,7 +60,7 @@ export const GridNode: React.FC<NodeProps<GridNodeType>> = ({ data, selected }) 
           <span>售电量</span>
           <span>{(s?.total_export_kwh ?? 0).toFixed(1)} kWh</span>
         </div>
-        {s?.frequency_hz && (
+        {s?.frequency_hz !== undefined && (
           <div className="node-row">
             <span>频率</span>
             <span>{s.frequency_hz} Hz</span>
