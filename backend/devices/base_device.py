@@ -96,6 +96,28 @@ class BaseDevice(ABC):
         Subclasses should override this to handle control commands.
         """
 
+    def get_register_table(self) -> List[Dict[str, Any]]:
+        """Return the full Modbus holding-register point table with current values.
+
+        Each entry is a dict with keys:
+          address     int   – 0-based holding-register address
+          name        str   – human-readable name (Chinese)
+          access      str   – "R" or "R/W"
+          data_type   str   – "UINT16" or "INT16"
+          scale       float – real value = raw_register / scale
+          unit        str   – physical unit string (may be empty)
+          raw         int   – current raw register value
+          value       str   – formatted real value string
+          description str   – extra notes (enum meanings, range, etc.)
+
+        Default implementation returns an empty list.  This is intentional:
+        returning an empty list (rather than raising NotImplementedError) means
+        custom or future device types that haven't yet implemented a point table
+        will gracefully return no data rather than crashing the API endpoint.
+        All concrete built-in device classes override this method.
+        """
+        return []
+
     # ------------------------------------------------------------------
     # Common helpers
     # ------------------------------------------------------------------

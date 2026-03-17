@@ -201,3 +201,50 @@ class BESSDevice(BaseDevice):
             elif addr == 2:
                 sp = self._from_signed_reg(val, 10.0)
                 self.power_setpoint_kw = sp
+
+    def get_register_table(self):
+        """Return the full Modbus holding-register point table for BESSDevice."""
+        self._build_registers()
+        r = self._registers
+
+        def _rv(raw, scale, signed=False):
+            if signed:
+                v = raw if raw < 0x8000 else raw - 0x10000
+                return f"{v / scale:.3g}"
+            return f"{raw / scale:.3g}"
+
+        defs = [
+            (0,  "在线状态",     "R/W", "UINT16", 1,     "",    "0=离线, 1=在线"),
+            (1,  "控制模式",     "R/W", "UINT16", 1,     "",    "0=待机, 1=充电, 2=放电"),
+            (2,  "功率设定值",   "R/W", "INT16",  10,    "kW",  "+充电 / -放电"),
+            (3,  "实时功率",     "R",   "INT16",  10,    "kW",  "+充电 / -放电"),
+            (4,  "SOC",         "R",   "UINT16", 10,    "%",   "荷电状态"),
+            (5,  "最低SOC",     "R/W", "UINT16", 10,    "%",   "放电截止"),
+            (6,  "最高SOC",     "R/W", "UINT16", 10,    "%",   "充电截止"),
+            (7,  "端口电压",     "R",   "UINT16", 10,    "V",   ""),
+            (8,  "充放电电流",   "R",   "INT16",  10,    "A",   "+充电 / -放电"),
+            (9,  "电池温度",     "R",   "UINT16", 10,    "°C",  ""),
+            (10, "充电效率",     "R",   "UINT16", 1000,  "",    "如 950 = 95.0%"),
+            (11, "放电效率",     "R",   "UINT16", 1000,  "",    "如 950 = 95.0%"),
+            (12, "累计充电量",   "R",   "UINT16", 1,     "kWh", "整数"),
+            (13, "累计放电量",   "R",   "UINT16", 1,     "kWh", "整数"),
+            (14, "等效循环次数", "R",   "UINT16", 10,    "次",  ""),
+            (15, "额定功率",     "R",   "UINT16", 10,    "kW",  ""),
+            (16, "电池容量",     "R",   "UINT16", 10,    "kWh", ""),
+        ]
+        table = []
+        for addr, name, access, dtype, scale, unit, desc in defs:
+            raw = r[addr]
+            signed = (dtype == "INT16")
+            table.append({
+                "address": addr,
+                "name": name,
+                "access": access,
+                "data_type": dtype,
+                "scale": scale,
+                "unit": unit,
+                "raw": raw,
+                "value": _rv(raw, scale, signed),
+                "description": desc,
+            })
+        return table

@@ -240,3 +240,49 @@ class LoadDevice(BaseDevice):
                 self.load_adjust_ratio = max(0.0, min(2.0, val / 100.0))
             elif addr == 9:
                 self.power_factor = max(0.1, min(1.0, val / 1000.0))
+
+    def get_register_table(self):
+        """Return the full Modbus holding-register point table for LoadDevice."""
+        self._build_registers()
+        r = self._registers
+
+        def _rv(raw, scale, signed=False):
+            if signed:
+                v = raw if raw < 0x8000 else raw - 0x10000
+                return f"{v / scale:.3g}"
+            return f"{raw / scale:.3g}"
+
+        mode_names = ["恒定功率", "日负荷曲线", "随机波动", "感性负荷", "容性负荷", "冲击负荷", "电机起动"]
+        cur_mode = mode_names[r[1]] if r[1] < len(mode_names) else str(r[1])
+
+        defs = [
+            (0,  "在线状态",     "R/W", "UINT16", 1,    "",    "0=离线, 1=在线"),
+            (1,  "负荷模式",     "R/W", "UINT16", 1,    "",    f"0=恒定…6=电机起动; 当前={cur_mode}"),
+            (2,  "有功功率",     "R",   "UINT16", 10,   "kW",  ""),
+            (3,  "负荷调节比例", "R/W", "UINT16", 1,    "%",   "0-100"),
+            (4,  "基础负荷比例", "R/W", "UINT16", 1,    "%",   "恒定/感性/容性模式有效"),
+            (5,  "额定功率",     "R",   "UINT16", 10,   "kW",  ""),
+            (6,  "日用电量",     "R",   "UINT16", 10,   "kWh", "每天复位"),
+            (7,  "母线电压",     "R",   "UINT16", 10,   "V",   ""),
+            (8,  "线路电流",     "R",   "UINT16", 10,   "A",   ""),
+            (9,  "功率因数",     "R",   "UINT16", 1000, "",    "如 850 = 0.850"),
+            (10, "无功功率",     "R",   "INT16",  10,   "kvar","滞后为正"),
+            (11, "视在功率",     "R",   "UINT16", 10,   "kVA", ""),
+            (12, "冲击峰值比例", "R",   "UINT16", 10,   "",    "冲击/电机模式有效"),
+        ]
+        table = []
+        for addr, name, access, dtype, scale, unit, desc in defs:
+            raw = r[addr]
+            signed = (dtype == "INT16")
+            table.append({
+                "address": addr,
+                "name": name,
+                "access": access,
+                "data_type": dtype,
+                "scale": scale,
+                "unit": unit,
+                "raw": raw,
+                "value": _rv(raw, scale, signed),
+                "description": desc,
+            })
+        return table

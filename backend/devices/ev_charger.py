@@ -189,3 +189,45 @@ class EVChargerDevice(BaseDevice):
                 self.power_limit_kw = min(
                     self._from_reg(val, 10.0), self.rated_power_kw
                 )
+
+    def get_register_table(self):
+        """Return the full Modbus holding-register point table for EVChargerDevice."""
+        self._build_registers()
+        r = self._registers
+
+        def _rv(raw, scale, signed=False):
+            if signed:
+                v = raw if raw < 0x8000 else raw - 0x10000
+                return f"{v / scale:.3g}"
+            return f"{raw / scale:.3g}"
+
+        defs = [
+            (0,  "在线状态",   "R/W", "UINT16", 1,  "",    "0=离线, 1=在线"),
+            (1,  "充电枪连接", "R",   "UINT16", 1,  "",    "0=未连接, 1=已连接"),
+            (2,  "充电状态",   "R",   "UINT16", 1,  "",    "0=空闲,1=已连接,2=充电中,3=已满,4=故障"),
+            (3,  "充电功率",   "R",   "UINT16", 10, "kW",  ""),
+            (4,  "车辆SOC",   "R",   "UINT16", 10, "%",   ""),
+            (5,  "目标SOC",   "R/W", "UINT16", 10, "%",   "充电终止条件"),
+            (6,  "充电电压",   "R",   "UINT16", 10, "V",   ""),
+            (7,  "充电电流",   "R",   "UINT16", 10, "A",   ""),
+            (8,  "本次充电量", "R",   "UINT16", 10, "kWh", "本次会话"),
+            (9,  "累计充电量", "R",   "UINT16", 1,  "kWh", "整数，历史总量"),
+            (10, "额定功率",   "R",   "UINT16", 10, "kW",  ""),
+            (11, "功率上限",   "R/W", "UINT16", 10, "kW",  "动态限功"),
+        ]
+        table = []
+        for addr, name, access, dtype, scale, unit, desc in defs:
+            raw = r[addr]
+            signed = (dtype == "INT16")
+            table.append({
+                "address": addr,
+                "name": name,
+                "access": access,
+                "data_type": dtype,
+                "scale": scale,
+                "unit": unit,
+                "raw": raw,
+                "value": _rv(raw, scale, signed),
+                "description": desc,
+            })
+        return table

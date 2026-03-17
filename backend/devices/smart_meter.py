@@ -171,3 +171,44 @@ class SmartMeterDevice(BaseDevice):
             addr = address + i
             if addr == 0:
                 self.online = bool(val)
+
+    def get_register_table(self):
+        """Return the full Modbus holding-register point table for SmartMeterDevice."""
+        self._build_registers()
+        r = self._registers
+
+        def _rv(raw, scale, signed=False):
+            if signed:
+                v = raw if raw < 0x8000 else raw - 0x10000
+                return f"{v / scale:.3g}"
+            return f"{raw / scale:.3g}"
+
+        defs = [
+            (0,  "在线状态",     "R/W", "UINT16", 1,    "",    "0=离线, 1=在线"),
+            (1,  "监测设备数量", "R",   "UINT16", 1,    "台",  ""),
+            (2,  "总有功功率",   "R",   "INT16",  10,   "kW",  "+消耗 / -发电"),
+            (3,  "总无功功率",   "R",   "INT16",  10,   "kvar","滞后为正"),
+            (4,  "总视在功率",   "R",   "UINT16", 10,   "kVA", ""),
+            (5,  "综合功率因数", "R",   "UINT16", 1000, "",    "如 980 = 0.980"),
+            (6,  "累计购电量",   "R",   "UINT16", 1,    "kWh", "整数"),
+            (7,  "累计售电量",   "R",   "UINT16", 1,    "kWh", "整数"),
+            (8,  "测量电压",     "R",   "UINT16", 10,   "V",   ""),
+            (9,  "测量频率",     "R",   "UINT16", 100,  "Hz",  ""),
+            (10, "总线电流",     "R",   "UINT16", 10,   "A",   "等效总电流"),
+        ]
+        table = []
+        for addr, name, access, dtype, scale, unit, desc in defs:
+            raw = r[addr]
+            signed = (dtype == "INT16")
+            table.append({
+                "address": addr,
+                "name": name,
+                "access": access,
+                "data_type": dtype,
+                "scale": scale,
+                "unit": unit,
+                "raw": raw,
+                "value": _rv(raw, scale, signed),
+                "description": desc,
+            })
+        return table

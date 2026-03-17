@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { DeviceInfo, LoadMode, WeatherMode } from '../../types';
 import { updateDevice, controlDevice } from '../../services/api';
+import { RegisterTableModal } from './RegisterTableModal';
 
 interface DeviceConfigPanelProps {
   device: DeviceInfo | null;
@@ -92,6 +93,7 @@ export const DeviceConfigPanel: React.FC<DeviceConfigPanelProps> = ({
   const [modbusPart, setModbusPart] = useState({ port: 5020, slaveId: 1 });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [showRegisters, setShowRegisters] = useState(false);
 
   useEffect(() => {
     if (device) {
@@ -486,9 +488,26 @@ export const DeviceConfigPanel: React.FC<DeviceConfigPanelProps> = ({
 
   return (
     <div className="config-panel">
+      {showRegisters && (
+        <RegisterTableModal
+          deviceId={device.id}
+          deviceName={device.name}
+          onClose={() => setShowRegisters(false)}
+        />
+      )}
       <div className="config-header">
         <span>{device.name}</span>
-        <button className="close-btn" onClick={onClose}>✕</button>
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <button
+            className="ctrl-btn"
+            title="查看完整通讯协议点表"
+            onClick={() => setShowRegisters(true)}
+            style={{ fontSize: 11, padding: '2px 7px' }}
+          >
+            📋 点表
+          </button>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
       </div>
       <div className="config-body">
         <div className="device-type-label">{device.device_type.toUpperCase()}</div>

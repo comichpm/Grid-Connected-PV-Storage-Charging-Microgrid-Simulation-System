@@ -254,3 +254,47 @@ class PVDevice(BaseDevice):
                     self.weather_mode = ALL_WEATHER_MODES[val]
             elif addr == 11:
                 self.custom_irr_factor = max(0.0, min(2.0, val / 100.0))
+
+    def get_register_table(self):
+        """Return the full Modbus holding-register point table for PVDevice."""
+        self._build_registers()
+        r = self._registers
+
+        def _rv(raw, scale, signed=False):
+            if signed:
+                v = raw if raw < 0x8000 else raw - 0x10000
+                return f"{v / scale:.3g}"
+            return f"{raw / scale:.3g}"
+
+        weather_names = ["晴天", "多云", "阴天", "雨天", "雪天", "雾天", "自定义"]
+
+        defs = [
+            (0,  "在线状态",       "R/W", "UINT16", 1,     "",      "0=离线, 1=在线"),
+            (1,  "实时功率",       "R",   "INT16",  10,    "kW",    "负值=发电"),
+            (2,  "辐照度",         "R",   "UINT16", 10,    "W/m²",  ""),
+            (3,  "电池温度",       "R",   "UINT16", 10,    "°C",    "组件电池温度"),
+            (4,  "环境温度",       "R",   "UINT16", 10,    "°C",    ""),
+            (5,  "直流电压",       "R",   "UINT16", 10,    "V",     ""),
+            (6,  "直流电流",       "R",   "UINT16", 10,    "A",     ""),
+            (7,  "功率限制比例",   "R/W", "UINT16", 1,     "%",     "0-100，写入限制最大出力"),
+            (8,  "日发电量",       "R",   "UINT16", 10,    "kWh",   "每天复位"),
+            (9,  "额定功率",       "R",   "UINT16", 10,    "kW",    ""),
+            (10, "天气模式",       "R/W", "UINT16", 1,     "",      f"0=晴天…6=自定义; 当前={weather_names[r[10]] if r[10] < len(weather_names) else r[10]}"),
+            (11, "自定义辐照因子", "R/W", "UINT16", 100,   "",      "天气=自定义时有效，0-200"),
+        ]
+        table = []
+        for addr, name, access, dtype, scale, unit, desc in defs:
+            raw = r[addr]
+            signed = (dtype == "INT16")
+            table.append({
+                "address": addr,
+                "name": name,
+                "access": access,
+                "data_type": dtype,
+                "scale": scale,
+                "unit": unit,
+                "raw": raw,
+                "value": _rv(raw, scale, signed),
+                "description": desc,
+            })
+        return table

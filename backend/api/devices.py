@@ -184,3 +184,49 @@ async def control_device(device_id: str, command: Dict[str, Any], request: Reque
         raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
 
     return {"status": "ok", "device_id": device_id}
+
+
+@router.get("/{device_id}/registers")
+async def get_device_registers(device_id: str, request: Request):
+    """Return the complete Modbus holding-register point table for a device.
+
+    Each entry describes one register: address, name, access rights (R/R/W),
+    data type, scale factor, physical unit, current raw value, formatted value
+    and a description with allowed values or range.
+    """
+    engine = _get_engine(request)
+    device = engine.get_device(device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+
+    table = device.get_register_table()
+
+    # Also return connection info so the UI can display it
+    mode = getattr(device, "modbus_mode", "tcp")
+    if mode == "rtu":
+        connection = {
+            "mode": "rtu",
+            "serial_port": getattr(device, "modbus_serial_port", "/dev/ttyUSB0"),
+            "baud_rate": getattr(device, "modbus_baud_rate", 9600),
+            "parity": getattr(device, "modbus_parity", "N"),
+            "stopbits": getattr(device, "modbus_stopbits", 1),
+            "bytesize": getattr(device, "modbus_bytesize", 8),
+            "slave_id": device.modbus_slave_id,
+        }
+    else:
+        connection = {
+            "mode": "tcp",
+            "host": "0.0.0.0",
+            "port": device.modbus_port,
+            "slave_id": device.modbus_slave_id,
+        }
+
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "device_type": device.device_type,
+        "function_code": "03 (Read Holding Registers)",
+        "register_count": len(table),
+        "connection": connection,
+        "registers": table,
+    }

@@ -176,3 +176,50 @@ class GridDevice(BaseDevice):
                 self.overload_threshold_ratio = self._from_reg(val, 100.0)
             elif addr == 14:
                 self.overload_max_duration_s = self._from_reg(val, 10.0)
+
+    def get_register_table(self):
+        """Return the full Modbus holding-register point table for GridDevice."""
+        self._build_registers()
+        r = self._registers
+
+        def _rv(raw, scale, signed=False):
+            if signed:
+                v = raw if raw < 0x8000 else raw - 0x10000
+                return f"{v / scale:.3g}"
+            return f"{raw / scale:.3g}"
+
+        defs = [
+            (0,  "在线状态",         "R/W", "UINT16", 1,     "",       "0=离线, 1=在线"),
+            (1,  "电网状态",         "R",   "UINT16", 1,     "",       "0=离线,1=购电,2=售电,3=空载,4=过载跳闸"),
+            (2,  "实时功率",         "R",   "INT16",  10,    "kW",     "+购电 / -售电"),
+            (3,  "母线电压",         "R",   "UINT16", 10,    "V",      ""),
+            (4,  "线路电流",         "R",   "UINT16", 10,    "A",      "三相等效"),
+            (5,  "电网频率",         "R",   "UINT16", 100,   "Hz",     ""),
+            (6,  "累计购电量",       "R",   "UINT16", 1,     "kWh",    "整数"),
+            (7,  "累计售电量",       "R",   "UINT16", 1,     "kWh",    "整数"),
+            (8,  "购电单价",         "R",   "UINT16", 100,   "元/kWh", ""),
+            (9,  "售电单价",         "R",   "UINT16", 100,   "元/kWh", ""),
+            (10, "最大购电功率",     "R/W", "UINT16", 10,    "kW",     ""),
+            (11, "最大售电功率",     "R/W", "UINT16", 10,    "kW",     ""),
+            (12, "额定容量",         "R/W", "UINT16", 10,    "kW",     ""),
+            (13, "过载阈值比例",     "R/W", "UINT16", 100,   "",       "如 120=1.2×额定"),
+            (14, "过载最长持续时间", "R/W", "UINT16", 10,    "s",      ""),
+            (15, "过载计时",         "R",   "UINT16", 10,    "s",      "当前过载持续时间"),
+            (16, "过载跳闸次数",     "R",   "UINT16", 1,     "次",     ""),
+        ]
+        table = []
+        for addr, name, access, dtype, scale, unit, desc in defs:
+            raw = r[addr]
+            signed = (dtype == "INT16")
+            table.append({
+                "address": addr,
+                "name": name,
+                "access": access,
+                "data_type": dtype,
+                "scale": scale,
+                "unit": unit,
+                "raw": raw,
+                "value": _rv(raw, scale, signed),
+                "description": desc,
+            })
+        return table

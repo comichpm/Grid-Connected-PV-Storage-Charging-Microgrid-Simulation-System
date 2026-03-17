@@ -827,3 +827,199 @@ body {
   color: #64748b;
   font-size: 10px;
 }
+
+/* ================================================================
+   Register Table Modal
+   ================================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 9999;
+  padding: 32px 16px;
+  overflow-y: auto;
+}
+
+.modal-box {
+  background: #0d1b2a;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid #1e293b;
+  gap: 12px;
+}
+
+.modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #60a5fa;
+  margin-bottom: 4px;
+}
+
+.modal-subtitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modal-conn-line {
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: 'Courier New', monospace;
+}
+
+.modal-fc {
+  font-size: 10px;
+  color: #475569;
+  font-family: 'Courier New', monospace;
+}
+
+.modal-body {
+  padding: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
+}
+
+.modal-loading,
+.modal-error {
+  padding: 24px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.modal-error {
+  color: #f87171;
+}
+
+.modal-footer {
+  padding: 8px 18px;
+  font-size: 11px;
+  color: #475569;
+  border-top: 1px solid #1e293b;
+  font-family: 'Courier New', monospace;
+}
+
+/* ---- Register table ---- */
+.reg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.reg-table thead tr {
+  background: #0f2133;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.reg-table th {
+  padding: 7px 10px;
+  text-align: left;
+  color: #64748b;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #1e3a5f;
+}
+
+.reg-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #1a2a3a;
+  color: #cbd5e1;
+  vertical-align: middle;
+}
+
+.reg-table tr:hover td {
+  background: #0f2133;
+}
+
+.reg-table .rw-row td {
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.reg-addr {
+  font-family: 'Courier New', monospace;
+  color: #64748b !important;
+  font-size: 11px;
+}
+
+.reg-name {
+  font-weight: 500;
+  color: #e2e8f0 !important;
+}
+
+.reg-dtype {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #94a3b8 !important;
+}
+
+.reg-scale {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #64748b !important;
+}
+
+.reg-unit {
+  color: #94a3b8 !important;
+  font-size: 11px;
+}
+
+.reg-raw {
+  font-family: 'Courier New', monospace;
+  color: #64748b !important;
+  font-size: 11px;
+}
+
+.reg-value {
+  font-family: 'Courier New', monospace;
+  color: #34d399 !important;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.reg-desc {
+  color: #64748b !important;
+  font-size: 11px;
+  white-space: normal;
+  max-width: 260px;
+}
+
+.access-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.access-badge.rw {
+  background: #1e3a5f;
+  color: #60a5fa;
+}
+
+.access-badge.ro {
+  background: #1a2a1a;
+  color: #4ade80;
+}

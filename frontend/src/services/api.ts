@@ -75,3 +75,7 @@ export const saveTopology = (data: {
   nodes: unknown[];
   edges: unknown[];
 }) => api.post('/topology/', data).then((r) => r.data);
+
+// Register point table
+export const getDeviceRegisters = (id: string): Promise<unknown> =>
+  api.get(`/devices/${id}/registers`).then((r) => r.data);
