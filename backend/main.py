@@ -43,6 +43,9 @@ async def lifespan(app: FastAPI):
         )
     app.state.engine = SimulationEngine()
     app.state.modbus_manager = ModbusServerManager(host="0.0.0.0")
+    # Restore topology edges from last saved session so multi-bus
+    # power balance works immediately without a canvas interaction.
+    app.state.engine.load_topology_from_file()
     yield
     # Shutdown
     engine: SimulationEngine = app.state.engine

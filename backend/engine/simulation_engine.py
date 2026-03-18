@@ -1,9 +1,11 @@
 """Simulation engine - main async loop."""
 
 import asyncio
-import time
+import json
 import logging
-from typing import Dict, List, Callable, Awaitable, Any, Optional
+import time
+from pathlib import Path
+from typing import Dict, List, Tuple, Callable, Awaitable, Any, Optional
 
 from backend.config import (
     SIMULATION_STEP_SECONDS,
@@ -11,6 +13,7 @@ from backend.config import (
     SIMULATION_MAX_STEP_SECONDS,
     SIMULATION_SPEED_MULTIPLIER,
     SIMULATION_START_HOUR,
+    TOPOLOGY_FILE,
 )
 from backend.devices.base_device import BaseDevice
 from backend.engine.power_balance import calculate_power_balance
@@ -44,6 +47,9 @@ class SimulationEngine:
         self._ws_callbacks: List[Callable[[Dict[str, Any]], Awaitable[None]]] = []
         self._task: Optional[asyncio.Task] = None
 
+        # Topology edges from the ReactFlow canvas: list of (source_id, target_id)
+        self.topology_edges: List[Tuple[str, str]] = []
+
         self._total_steps: int = 0
         self._real_start_time: float = 0.0
 
@@ -65,6 +71,44 @@ class SimulationEngine:
         for device in self.devices.values():
             if device.device_type == "smart_meter":
                 device.set_devices_registry(self.devices)  # type: ignore[attr-defined]
+
+    # ------------------------------------------------------------------
+    # Topology management
+    # ------------------------------------------------------------------
+
+    def update_topology(self, edges: List[Tuple[str, str]]) -> None:
+        """Update the topology edge list used by the power balance engine.
+
+        Args:
+            edges: List of (source_device_id, target_device_id) tuples
+                   representing the connections drawn on the canvas.
+        """
+        self.topology_edges = list(edges)
+        logger.info(
+            "Topology updated: %d edge(s) – multi-bus power balance active",
+            len(self.topology_edges),
+        )
+
+    def load_topology_from_file(self) -> None:
+        """Load persisted topology edges from the topology JSON file.
+
+        Called during application startup so the engine immediately knows
+        about any topology that was saved in a previous session.
+        """
+        topo_path = Path(TOPOLOGY_FILE)
+        if not topo_path.exists():
+            return
+        try:
+            with topo_path.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            raw_edges = data.get("edges", [])
+            edges: List[Tuple[str, str]] = [
+                (e["source"], e["target"]) for e in raw_edges
+                if "source" in e and "target" in e
+            ]
+            self.update_topology(edges)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not load topology from file: %s", exc)
 
     def get_device(self, device_id: str) -> Optional[BaseDevice]:
         return self.devices.get(device_id)
@@ -185,7 +229,7 @@ class SimulationEngine:
                 device.update(self.sim_time_hours, sim_dt_seconds)
 
         # 2. Calculate power balance and update grid
-        _, power_summary = calculate_power_balance(device_list)
+        _, power_summary = calculate_power_balance(device_list, self.topology_edges)
 
         # 3. Update grid device state (totals/protection)
         for device in device_list:
@@ -226,7 +270,7 @@ class SimulationEngine:
 
     def get_status(self) -> Dict[str, Any]:
         device_list = list(self.devices.values())
-        _, power_summary = calculate_power_balance(device_list)
+        _, power_summary = calculate_power_balance(device_list, self.topology_edges)
         return {
             "state": self.state,
             "sim_time_hours": round(self.sim_time_hours, 4),
