@@ -117,9 +117,9 @@ class SimulationEngine:
         device = self.devices.get(device_id)
         if device is not None:
             device.config.update(config)
-            for key, val in config.items():
-                if hasattr(device, key):
-                    setattr(device, key, val)
+            # Use the device's apply_config_update for proper type coercion
+            # and device-specific field mapping (e.g. EV charger aliases).
+            device.apply_config_update(config)
             # Re-wire smart meters in case monitored_device_ids changed
             if device.device_type == "smart_meter":
                 self._wire_smart_meters()

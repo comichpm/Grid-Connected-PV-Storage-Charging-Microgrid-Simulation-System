@@ -28,9 +28,47 @@ except ImportError:
     logger.warning("pymodbus serial server not available – RTU mode will be disabled")
 
 
+class WriteCallbackDataBlock(ModbusSequentialDataBlock):
+    """A Modbus data-block that notifies the owning device on external writes.
+
+    Internal simulation writes (sync_modbus_registers) use ``set_internal``
+    which bypasses the callback to avoid feedback loops.  External Modbus
+    client writes (FC6 / FC16) go through the normal ``setValues`` path which
+    calls ``device.handle_modbus_write`` so the device can react immediately.
+    """
+
+    def __init__(self, device_ref, address: int, values):
+        super().__init__(address, values)
+        self._device_ref = device_ref
+
+    # ------------------------------------------------------------------
+    # Internal simulation update path (no callback)
+    # ------------------------------------------------------------------
+
+    def set_internal(self, values) -> None:
+        """Update all registers from the simulation engine without triggering
+        the write callback."""
+        super().setValues(0, values)
+
+    # ------------------------------------------------------------------
+    # External Modbus client write path (triggers device callback)
+    # ------------------------------------------------------------------
+
+    def setValues(self, address: int, values):
+        """Called by the pymodbus server for FC6/FC16 client writes."""
+        super().setValues(address, values)
+        try:
+            self._device_ref.handle_modbus_write(address, list(values))
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(
+                "handle_modbus_write error for device %s: %s",
+                getattr(self._device_ref, "device_id", "?"), exc,
+            )
+
+
 def _build_context(device_ref, slave_id: int):
     """Create a Modbus server context with 100 holding registers for a device."""
-    datablock = ModbusSequentialDataBlock(0, [0] * 100)
+    datablock = WriteCallbackDataBlock(device_ref, 0, [0] * 100)
     device_ctx = ModbusDeviceContext(hr=datablock)
     device_ref.set_modbus_datablock(datablock)
     return ModbusServerContext(devices={slave_id: device_ctx}, single=False), datablock

@@ -82,13 +82,43 @@ class BaseDevice(ABC):
         self._modbus_datablock = datablock
 
     def sync_modbus_registers(self) -> None:
-        """Push current state to the Modbus holding-register datablock."""
+        """Push current state to the Modbus holding-register datablock.
+
+        Uses ``set_internal`` when the datablock is a ``WriteCallbackDataBlock``
+        so that our own writes do not trigger the external-write callback.
+        """
         self._build_registers()
         if self._modbus_datablock is not None:
             try:
-                self._modbus_datablock.setValues(0, self._registers)
+                if hasattr(self._modbus_datablock, "set_internal"):
+                    self._modbus_datablock.set_internal(self._registers)
+                else:
+                    self._modbus_datablock.setValues(0, self._registers)
             except Exception as exc:  # noqa: BLE001
                 logger.debug("Modbus sync error for %s: %s", self.device_id, exc)
+
+    def apply_config_update(self, config: Dict[str, Any]) -> None:
+        """Apply a config dict to device attributes with type coercion.
+
+        The generic implementation uses ``setattr`` for any config key that
+        already exists as a device attribute.  Device subclasses can override
+        this to handle renamed or derived fields (e.g. EV charger's
+        ``initial_vehicle_soc`` → ``vehicle_soc``).
+        """
+        for key, val in config.items():
+            if hasattr(self, key):
+                try:
+                    current = getattr(self, key)
+                    if isinstance(current, float):
+                        setattr(self, key, float(val))
+                    elif isinstance(current, int) and not isinstance(current, bool):
+                        setattr(self, key, int(val))
+                    elif isinstance(current, bool):
+                        setattr(self, key, bool(val))
+                    else:
+                        setattr(self, key, val)
+                except (TypeError, ValueError):
+                    setattr(self, key, val)
 
     def handle_modbus_write(self, address: int, values: List[int]) -> None:
         """Called when an external Modbus client writes to holding registers.

@@ -190,6 +190,22 @@ class EVChargerDevice(BaseDevice):
                     self._from_reg(val, 10.0), self.rated_power_kw
                 )
 
+    def apply_config_update(self, config: Dict[str, Any]) -> None:
+        """Override to handle EV charger's config-key → attribute-name aliases."""
+        super().apply_config_update(config)
+        # initial_vehicle_soc in config → vehicle_soc on device
+        if "initial_vehicle_soc" in config:
+            try:
+                self.vehicle_soc = float(config["initial_vehicle_soc"])
+            except (TypeError, ValueError):
+                pass
+        # target_vehicle_soc in config → target_soc on device
+        if "target_vehicle_soc" in config:
+            try:
+                self.target_soc = float(config["target_vehicle_soc"])
+            except (TypeError, ValueError):
+                pass
+
     def get_register_table(self):
         """Return the full Modbus holding-register point table for EVChargerDevice."""
         self._build_registers()

@@ -12,6 +12,7 @@ import {
   type Node,
   type Edge,
   type NodeTypes,
+  type EdgeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -21,8 +22,9 @@ import { BESSNode } from './BESSNode';
 import { EVChargerNode } from './EVChargerNode';
 import { LoadNode } from './LoadNode';
 import { SmartMeterNode } from './SmartMeterNode';
+import { PowerFlowEdge } from './PowerFlowEdge';
 import type { DeviceState, DeviceType, DeviceInfo } from '../../types';
-import { createDevice, deleteDevice, saveTopology } from '../../services/api';
+import { createDevice, deleteDevice, saveTopology, getTopology } from '../../services/api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const nodeTypes: NodeTypes = {
@@ -32,6 +34,10 @@ const nodeTypes: NodeTypes = {
   ev_charger: EVChargerNode as NodeTypes[string],
   load: LoadNode as NodeTypes[string],
   smart_meter: SmartMeterNode as NodeTypes[string],
+};
+
+const edgeTypes: EdgeTypes = {
+  powerFlow: PowerFlowEdge as EdgeTypes[string],
 };
 
 interface MicrogridCanvasProps {
@@ -50,16 +56,77 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const topologyLoaded = useRef(false);
 
   const onConnect = useCallback(
-    (params: Connection) => setEdges((eds) => addEdge(params, eds)),
+    (params: Connection) =>
+      setEdges((eds) => addEdge({ ...params, type: 'powerFlow' }, eds)),
     [setEdges]
   );
+
+  // Auto-load topology and device nodes from the backend on first mount,
+  // so the canvas restores its previous state across page refreshes.
+  React.useEffect(() => {
+    if (topologyLoaded.current || !deviceList.length) return;
+    topologyLoaded.current = true;
+
+    getTopology()
+      .then((topo) => {
+        const deviceMap = new Map<string, DeviceInfo>(
+          deviceList.map((d) => [d.id, d])
+        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const savedNodes: Node[] = (topo.nodes ?? [])
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .map((n: any) => {
+            const deviceId: string = n.data?.deviceId ?? n.id;
+            const device = deviceMap.get(deviceId);
+            if (!device) return null;
+            const state = deviceStates[device.id];
+            return {
+              id: device.id,
+              type: device.device_type,
+              position: n.position ?? { x: device.position_x, y: device.position_y },
+              data: {
+                deviceId: device.id,
+                deviceType: device.device_type,
+                label: device.name,
+                state: state ?? device.state,
+                modbusPort: device.modbus_port,
+                modbusSlave: device.modbus_slave_id,
+                modbusMode: (device.config?.modbus_mode as string) ?? 'tcp',
+                modbusSerial: (device.config?.modbus_serial_port as string) ?? '',
+                modbusBaud: (device.config?.modbus_baud_rate as number) ?? 9600,
+                modbusParity: (device.config?.modbus_parity as string) ?? 'N',
+                onClick: () => onNodeClick(device.id),
+              },
+            } as Node;
+          })
+          .filter(Boolean) as Node[];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const savedEdges: Edge[] = (topo.edges ?? []).map((e: any) => ({
+          id: e.id,
+          source: e.source,
+          target: e.target,
+          type: 'powerFlow',
+          data: {
+            source_power_kw: deviceStates[e.source]?.power_kw ?? 0,
+            source_type: deviceStates[e.source]?.device_type ?? '',
+          },
+        }));
+
+        if (savedNodes.length > 0) setNodes(savedNodes);
+        if (savedEdges.length > 0) setEdges(savedEdges);
+      })
+      .catch(console.error);
+  }, [deviceList, deviceStates, onNodeClick, setNodes, setEdges]);
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
   }, []);
+
 
   const onDrop = useCallback(
     async (event: React.DragEvent) => {
@@ -140,6 +207,24 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
     );
   }, [deviceStates, setNodes]);
 
+  // Update edge power flow data when device states change
+  React.useEffect(() => {
+    setEdges((eds) =>
+      eds.map((edge) => {
+        const srcState = deviceStates[edge.source];
+        return {
+          ...edge,
+          type: 'powerFlow',
+          data: {
+            ...edge.data,
+            source_power_kw: srcState?.power_kw ?? 0,
+            source_type: srcState?.device_type ?? '',
+          },
+        };
+      })
+    );
+  }, [deviceStates, setEdges]);
+
   // Sync Modbus / protocol info when deviceList changes (e.g. after config save)
   React.useEffect(() => {
     if (!deviceList.length) return;
@@ -207,6 +292,8 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
         onDragOver={onDragOver}
         onNodesDelete={onNodesDelete}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={{ type: 'powerFlow' }}
         connectionMode={ConnectionMode.Loose}
         fitView
         deleteKeyCode="Delete"

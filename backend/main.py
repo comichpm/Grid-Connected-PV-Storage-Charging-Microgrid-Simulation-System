@@ -100,6 +100,10 @@ if _FRONTEND_DIST.exists():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         """SPA fallback – return index.html for any non-API path."""
+        # Exclude WebSocket paths from the SPA catch-all
+        if full_path in ("ws", "ws/"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404)
         file_path = _FRONTEND_DIST / full_path
         if file_path.is_file():
             return FileResponse(str(file_path))
