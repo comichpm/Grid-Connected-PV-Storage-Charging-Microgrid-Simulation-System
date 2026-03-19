@@ -126,6 +126,7 @@ const App: React.FC = () => {
         {selectedDevice && (
           <div className="sidebar-right">
             <DeviceConfigPanel
+              key={selectedDeviceId ?? ''}
               device={selectedDevice}
               onClose={() => {
                 setSelectedDeviceId(null);
