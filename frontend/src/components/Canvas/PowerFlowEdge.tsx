@@ -27,8 +27,11 @@
  *   Step 2 – If source injects  & target absorbs  → flow forward (source → target).
  *            If target injects  & source absorbs  → flow backward (target → source).
  *   Step 3 – SmartMeter is transparent: use the OTHER endpoint's role.
- *   Step 4 – If only one side has clear directionality, use that.
- *   Step 5 – Otherwise show no animation (idle / zero-power state).
+ *   Step 4 – Grid↔Grid inter-bus edges: the "child" bus (larger |power|) indicates
+ *            direction and magnitude – child exporting → flows child→parent;
+ *            child importing → flows parent→child.
+ *   Step 5 – If only one side has clear directionality, use that.
+ *   Step 6 – Otherwise show no animation (idle / zero-power state).
  *
  * Colors
  * ──────
@@ -164,6 +167,47 @@ function getFlowDirection(
     return null;
   }
 
+  // ── Grid↔Grid inter-bus edge ──────────────────────────────────────────────
+  // Each Grid's power_kw represents its exchange with ITS OWN bus, not the
+  // shared wire.  In a hierarchical tree the "child" sub-bus grid has a larger
+  // |power| than the parent (the parent aggregates multiple branches which can
+  // cancel each other, reducing its net).  The child's power_kw is the branch
+  // power flowing on the inter-bus wire.
+  //
+  // Child exports (neg power_kw) → energy flows child → parent.
+  // Child imports (pos power_kw) → energy flows parent → child.
+  if (srcType === 'grid' && tgtType === 'grid') {
+    const srcAbs = Math.abs(srcPower);
+    const tgtAbs = Math.abs(tgtPower);
+    let childPower: number;
+    let childIsSrc: boolean;
+
+    if (tgtAbs > srcAbs) {
+      // tgt has larger |power| → tgt is the child/sub-bus
+      childPower = tgtPower;
+      childIsSrc = false;
+    } else if (srcAbs > tgtAbs) {
+      // src has larger |power| → src is the child/sub-bus
+      childPower = srcPower;
+      childIsSrc = true;
+    } else {
+      // Equal magnitudes: use sign difference to break the tie
+      if (srcPower < -THRESHOLD_KW && tgtPower > THRESHOLD_KW) return true;  // src exports → forward
+      if (tgtPower < -THRESHOLD_KW && srcPower > THRESHOLD_KW) return false; // tgt exports → backward
+      return null; // truly indeterminate (e.g. both exporting equal amounts)
+    }
+
+    if (Math.abs(childPower) < THRESHOLD_KW) return null;
+
+    // Child exporting (neg): flows child → parent
+    // Child importing (pos): flows parent → child
+    if (childPower < -THRESHOLD_KW) {
+      return childIsSrc ? true : false;   // src-child exports → forward; tgt-child exports → backward
+    } else {
+      return childIsSrc ? false : true;   // src-child imports ← backward; tgt-child imports → forward
+    }
+  }
+
   // ── General case: neither endpoint is a SmartMeter ───────────────────────
   const srcInj = injectsEnergy(srcPower, srcType);
   const tgtInj = injectsEnergy(tgtPower, tgtType);
@@ -231,6 +275,10 @@ function getAbsKW(
     return isRoutingDevice(srcType)
       ? Math.abs(tgtTotalActiveKW)  // Grid↔SM or SM↔SM: use SM's branch measurement
       : Math.abs(srcPower);         // terminal↔SM: use the terminal's power
+  }
+  // Grid↔Grid inter-bus: use the child's power (larger |power| = branch power)
+  if (srcType === 'grid' && tgtType === 'grid') {
+    return Math.max(Math.abs(srcPower), Math.abs(tgtPower));
   }
   // Both are non-SM devices – use the more conservative (smaller non-zero) value
   const sa = Math.abs(srcPower);
