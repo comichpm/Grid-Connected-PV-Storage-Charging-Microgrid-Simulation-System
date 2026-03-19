@@ -81,6 +81,7 @@ export interface DeviceState {
   power_kw: number;
   // Grid specific
   grid_status?: number;    // 0=offline, 1=import, 2=export, 3=idle, 4=overload-trip
+  parent_grid_id?: string | null;  // ID of parent Grid in multi-bus hierarchy (null = root)
   voltage_kv?: number;
   frequency_hz?: number;
   grid_import_kwh?: number;

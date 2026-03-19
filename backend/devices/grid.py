@@ -1,7 +1,7 @@
 """Grid (Slack Bus) device simulator."""
 
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from .base_device import BaseDevice
 
@@ -43,6 +43,11 @@ class GridDevice(BaseDevice):
 
         # Status: 0=offline, 1=importing, 2=exporting, 3=idle, 4=overload-trip
         self.grid_status: int = 3
+
+        # Parent grid device ID in a hierarchical multi-bus topology.
+        # None = this is the root (or single-bus) grid.
+        # Set by power_balance._balance_multi() after each topo sort.
+        self.parent_grid_id: Optional[str] = None
 
     # ------------------------------------------------------------------
     # BaseDevice interface
@@ -105,6 +110,7 @@ class GridDevice(BaseDevice):
             "current_a": round(self.current_a, 2),
             "frequency_hz": self.frequency_hz,
             "grid_status": self.grid_status,
+            "parent_grid_id": self.parent_grid_id,
             "total_import_kwh": round(self.total_import_kwh, 3),
             "total_export_kwh": round(self.total_export_kwh, 3),
             "import_price": self.import_price,

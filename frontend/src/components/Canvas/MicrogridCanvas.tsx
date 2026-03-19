@@ -219,6 +219,19 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
       eds.map((edge) => {
         const srcState = deviceStates[edge.source];
         const tgtState = deviceStates[edge.target];
+
+        // For Grid↔Grid inter-bus edges, identify which endpoint is the "child"
+        // sub-bus using the backend-provided parent_grid_id.  The child's power_kw
+        // is the authoritative branch power on the connecting wire.
+        let gridChildIsSource: boolean | null = null;
+        if (srcState?.device_type === 'grid' && tgtState?.device_type === 'grid') {
+          const srcParentId = srcState?.parent_grid_id ?? null;
+          const tgtParentId = tgtState?.parent_grid_id ?? null;
+          if (srcParentId === edge.target) gridChildIsSource = true;        // src is child of tgt
+          else if (tgtParentId === edge.source) gridChildIsSource = false;  // tgt is child of src
+          // null = root↔root edge (rare) or topology not yet known
+        }
+
         return {
           ...edge,
           type: 'powerFlow',
@@ -230,6 +243,7 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
             target_power_kw: tgtState?.power_kw ?? 0,
             target_type: tgtState?.device_type ?? '',
             target_total_active_kw: tgtState?.total_active_kw ?? 0,
+            grid_child_is_source: gridChildIsSource,
           },
         };
       })

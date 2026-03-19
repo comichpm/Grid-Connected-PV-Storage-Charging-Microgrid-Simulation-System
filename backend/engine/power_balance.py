@@ -83,6 +83,7 @@ def calculate_power_balance(
 
     # ---- Route to single-bus or multi-bus algorithm ----
     if len(grid_devices) == 1:
+        grid_devices[0].parent_grid_id = None  # single-grid has no parent
         grid_power = _balance_single(grid_devices[0], non_grid_sum)
         total_grid_power = grid_devices[0].power_kw
         balance_error = non_grid_sum - total_grid_power
@@ -219,6 +220,13 @@ def _balance_multi(
     for gid in grid_ids:
         if gid not in processed:
             processing_order.append(gid)
+
+    # ---- Assign parent_grid_id to each Grid device for telemetry ----
+    # This lets the frontend correctly identify which endpoint is the "child"
+    # on any Grid↔Grid edge without relying on unreliable |power| heuristics.
+    for gid in grid_ids:
+        gd_dev: GridDevice = device_map[gid]  # type: ignore[assignment]
+        gd_dev.parent_grid_id = parent_of.get(gid)  # None for the root grid
 
     # Root = last in processing order (it gets orphan devices too)
     root_id: str = processing_order[-1]

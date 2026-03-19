@@ -21,21 +21,32 @@
  *                      power_kw < 0 = exporting  (grid absorbs surplus generation)
  *   SmartMeter:        power_kw is always 0; it is treated as transparent.
  *
- * Direction algorithm
- * ───────────────────
- *   Step 1 – Identify which endpoint injects and which absorbs.
- *   Step 2 – If source injects  & target absorbs  → flow forward (source → target).
- *            If target injects  & source absorbs  → flow backward (target → source).
- *   Step 3 – SmartMeter is transparent: use the OTHER endpoint's role.
- *   Step 4 – Grid↔Grid inter-bus edges: the "child" bus (larger |power|) indicates
- *            direction and magnitude – child exporting → flows child→parent;
- *            child importing → flows parent→child.
- *   Step 5 – If only one side has clear directionality, use that.
- *   Step 6 – Otherwise show no animation (idle / zero-power state).
+ * Grid↔Grid inter-bus edges
+ * ─────────────────────────
+ *   Each Grid's power_kw = its total exchange with ITS OWN local bus.
+ *   On the wire between two Grid nodes the "branch power" = child Grid's power_kw,
+ *   because the child bus is balanced locally and whatever remains flows on the wire.
+ *
+ *   The backend sets parent_grid_id on every non-root Grid device.
+ *   MicrogridCanvas computes grid_child_is_source from this:
+ *     true  → the edge's source node is the child (sub-bus)
+ *     false → the edge's target node is the child (sub-bus)
+ *     null  → no parent/child relationship (root↔root, or not yet known)
+ *
+ *   Direction:  child.power_kw > 0 → child imports  → parent→child (forward if child=target)
+ *               child.power_kw < 0 → child exports  → child→parent (forward if child=source)
+ *   Magnitude:  |child.power_kw|
+ *   Color:      amber  – child importing (parent supplies child's bus)
+ *               green  – child exporting (child's bus has net generation)
+ *
+ * SmartMeter edges
+ * ────────────────
+ *   • SM ↔ terminal  – direction/magnitude from the terminal's own power_kw
+ *   • SM ↔ routing   – direction/magnitude from the SM's total_active_kw
  *
  * Colors
  * ──────
- *   #4ade80  green  – renewable generation (PV or BESS discharging)
+ *   #4ade80  green  – renewable generation (PV, BESS discharge, sub-bus export)
  *   #fbbf24  amber  – grid supply (importing)
  *   #f97316  orange – load or storage charging
  *   #475569  grey   – idle (below threshold)
@@ -64,6 +75,15 @@ export interface PowerFlowEdgeData {
    * total_active_kw measured by the TARGET node when it is a SmartMeter.
    */
   target_total_active_kw?: number;
+  /**
+   * For Grid↔Grid inter-bus edges only: which endpoint is the child sub-bus?
+   *   true  → source node is the child (its power_kw = branch power)
+   *   false → target node is the child (its power_kw = branch power)
+   *   null  → root↔root edge or topology not yet resolved
+   *
+   * Set by MicrogridCanvas from the backend's parent_grid_id field.
+   */
+  grid_child_is_source?: boolean | null;
 }
 
 const IDLE_COLOR = '#475569';
@@ -121,12 +141,15 @@ function absorbsEnergy(power: number, type: string): boolean {
 /**
  * Determine the physical flow direction for an edge.
  *
+ * For Grid↔Grid edges: uses the backend-provided gridChildIsSource to pick
+ * the child's power_kw as the authoritative branch power:
+ *   child.power_kw > 0 (importing) → parent→child
+ *   child.power_kw < 0 (exporting) → child→parent
+ *
  * For SmartMeter edges the direction depends on whether the OTHER endpoint
  * is a routing device (grid/SM) or a terminal device (pv/bess/load/ev):
  *   • SM ↔ terminal  – direction determined by the terminal's power_kw
  *   • SM ↔ routing   – direction determined by the SM's total_active_kw
- *     (the SM knows exactly what power its branch is producing/consuming;
- *      the Grid's power_kw spans all branches and must not be used here)
  *
  * @returns `true`  = forward  (energy flows source → target)
  *          `false` = backward (energy flows target → source)
@@ -135,9 +158,41 @@ function absorbsEnergy(power: number, type: string): boolean {
 function getFlowDirection(
   srcPower: number, srcType: string, srcTotalActiveKW: number,
   tgtPower: number, tgtType: string, tgtTotalActiveKW: number,
+  gridChildIsSource: boolean | null,
 ): boolean | null {
   const srcIsSM = srcType === 'smart_meter';
   const tgtIsSM = tgtType === 'smart_meter';
+
+  // ── Grid↔Grid inter-bus edge ──────────────────────────────────────────────
+  // Use the child's power_kw as the authoritative branch power.
+  // Do NOT use a magnitude heuristic ("larger power = child") because it fails
+  // when both branches import (parent power > any child power).
+  if (srcType === 'grid' && tgtType === 'grid') {
+    let childPower: number;
+    let childIsSrc: boolean;
+
+    if (gridChildIsSource === true) {
+      childPower = srcPower;
+      childIsSrc = true;
+    } else if (gridChildIsSource === false) {
+      childPower = tgtPower;
+      childIsSrc = false;
+    } else {
+      // No parent-child relationship known (root↔root or pre-simulation).
+      // Fall back to a sign-based heuristic: if they have opposite signs,
+      // the one that is exporting (neg) is the child.
+      if (srcPower < -THRESHOLD_KW && tgtPower > THRESHOLD_KW) return true;
+      if (tgtPower < -THRESHOLD_KW && srcPower > THRESHOLD_KW) return false;
+      // Same sign or zero → indeterminate
+      return null;
+    }
+
+    if (Math.abs(childPower) < THRESHOLD_KW) return null;
+    // child imports (pos) → parent→child; child exports (neg) → child→parent
+    if (childPower > THRESHOLD_KW)  return childIsSrc ? false : true;
+    if (childPower < -THRESHOLD_KW) return childIsSrc ? true  : false;
+    return null;
+  }
 
   // ── SmartMeter as source ──────────────────────────────────────────────────
   if (srcIsSM && !tgtIsSM) {
@@ -167,48 +222,7 @@ function getFlowDirection(
     return null;
   }
 
-  // ── Grid↔Grid inter-bus edge ──────────────────────────────────────────────
-  // Each Grid's power_kw represents its exchange with ITS OWN bus, not the
-  // shared wire.  In a hierarchical tree the "child" sub-bus grid has a larger
-  // |power| than the parent (the parent aggregates multiple branches which can
-  // cancel each other, reducing its net).  The child's power_kw is the branch
-  // power flowing on the inter-bus wire.
-  //
-  // Child exports (neg power_kw) → energy flows child → parent.
-  // Child imports (pos power_kw) → energy flows parent → child.
-  if (srcType === 'grid' && tgtType === 'grid') {
-    const srcAbs = Math.abs(srcPower);
-    const tgtAbs = Math.abs(tgtPower);
-    let childPower: number;
-    let childIsSrc: boolean;
-
-    if (tgtAbs > srcAbs) {
-      // tgt has larger |power| → tgt is the child/sub-bus
-      childPower = tgtPower;
-      childIsSrc = false;
-    } else if (srcAbs > tgtAbs) {
-      // src has larger |power| → src is the child/sub-bus
-      childPower = srcPower;
-      childIsSrc = true;
-    } else {
-      // Equal magnitudes: use sign difference to break the tie
-      if (srcPower < -THRESHOLD_KW && tgtPower > THRESHOLD_KW) return true;  // src exports → forward
-      if (tgtPower < -THRESHOLD_KW && srcPower > THRESHOLD_KW) return false; // tgt exports → backward
-      return null; // truly indeterminate (e.g. both exporting equal amounts)
-    }
-
-    if (Math.abs(childPower) < THRESHOLD_KW) return null;
-
-    // Child exporting (neg): flows child → parent
-    // Child importing (pos): flows parent → child
-    if (childPower < -THRESHOLD_KW) {
-      return childIsSrc ? true : false;   // src-child exports → forward; tgt-child exports → backward
-    } else {
-      return childIsSrc ? false : true;   // src-child imports ← backward; tgt-child imports → forward
-    }
-  }
-
-  // ── General case: neither endpoint is a SmartMeter ───────────────────────
+  // ── General case: neither endpoint is a SmartMeter or Grid↔Grid ──────────
   const srcInj = injectsEnergy(srcPower, srcType);
   const tgtInj = injectsEnergy(tgtPower, tgtType);
   const srcAbs = absorbsEnergy(srcPower, srcType);
@@ -232,7 +246,18 @@ function getFlowColor(
   srcPower: number, srcType: string, srcTotalActiveKW: number,
   tgtPower: number, tgtType: string, tgtTotalActiveKW: number,
   flowForward: boolean,
+  gridChildIsSource: boolean | null,
 ): string {
+  // Grid↔Grid: color from the child's power direction
+  //   child exporting (neg) → green  (sub-bus has net generation flowing upstream)
+  //   child importing (pos) → amber  (parent/external grid supplies child's bus)
+  if (srcType === 'grid' && tgtType === 'grid') {
+    const childPower = gridChildIsSource === true  ? srcPower
+                     : gridChildIsSource === false ? tgtPower
+                     : (flowForward ? srcPower : tgtPower);
+    return childPower < -THRESHOLD_KW ? '#4ade80' : '#fbbf24';
+  }
+
   const injType  = flowForward ? srcType  : tgtType;
   const injPower = flowForward ? srcPower : tgtPower;
 
@@ -253,17 +278,22 @@ function getFlowColor(
 /**
  * Representative power magnitude for the animation speed and label.
  *
- * Key rule: for SM ↔ routing-device (Grid/SM) edges, use the SM's
- * total_active_kw as the branch power.  The Grid's power_kw spans all
- * connected branches and must NOT be used here — that would make an
- * idle branch (PV/BESS at 0 kW) appear to carry the full grid load.
- *
- * For SM ↔ terminal-device edges, use the terminal's power_kw as before.
+ * Grid↔Grid: use the child's power_kw (= the branch power on the wire).
+ * SM ↔ routing-device: use the SM's total_active_kw.
+ * SM ↔ terminal: use the terminal's power_kw.
+ * General: smaller non-zero value.
  */
 function getAbsKW(
   srcPower: number, srcType: string, srcTotalActiveKW: number,
   tgtPower: number, tgtType: string, tgtTotalActiveKW: number,
+  gridChildIsSource: boolean | null,
 ): number {
+  // Grid↔Grid: child's power_kw is the actual branch power
+  if (srcType === 'grid' && tgtType === 'grid') {
+    if (gridChildIsSource === true)  return Math.abs(srcPower);
+    if (gridChildIsSource === false) return Math.abs(tgtPower);
+    return Math.max(Math.abs(srcPower), Math.abs(tgtPower)); // fallback
+  }
   if (srcType === 'smart_meter') {
     // SM is source: choose magnitude based on what the target is
     return isRoutingDevice(tgtType)
@@ -276,11 +306,7 @@ function getAbsKW(
       ? Math.abs(tgtTotalActiveKW)  // Grid↔SM or SM↔SM: use SM's branch measurement
       : Math.abs(srcPower);         // terminal↔SM: use the terminal's power
   }
-  // Grid↔Grid inter-bus: use the child's power (larger |power| = branch power)
-  if (srcType === 'grid' && tgtType === 'grid') {
-    return Math.max(Math.abs(srcPower), Math.abs(tgtPower));
-  }
-  // Both are non-SM devices – use the more conservative (smaller non-zero) value
+  // Both are non-SM, non-Grid devices – use the more conservative (smaller non-zero) value
   const sa = Math.abs(srcPower);
   const ta = Math.abs(tgtPower);
   if (sa < THRESHOLD_KW) return ta;
@@ -307,12 +333,13 @@ export const PowerFlowEdge: React.FC<EdgeProps> = ({
   const tgtPower = d.target_power_kw ?? 0;
   const tgtType  = d.target_type  ?? '';
   const tgtTotalKW = d.target_total_active_kw ?? 0;
+  const gridChildIsSource = d.grid_child_is_source ?? null;
 
-  const flowDirection = getFlowDirection(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW);
+  const flowDirection = getFlowDirection(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW, gridChildIsSource);
   const isActive = flowDirection !== null;
-  const absKW = getAbsKW(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW);
+  const absKW = getAbsKW(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW, gridChildIsSource);
   const color = isActive
-    ? getFlowColor(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW, flowDirection)
+    ? getFlowColor(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW, flowDirection, gridChildIsSource)
     : IDLE_COLOR;
 
   // Dot speed: faster for higher power (0.8 s → 3.5 s range)
