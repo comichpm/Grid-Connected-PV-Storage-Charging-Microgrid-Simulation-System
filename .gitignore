@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# Node.js
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Backend runtime files
+topology.json
+*.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
