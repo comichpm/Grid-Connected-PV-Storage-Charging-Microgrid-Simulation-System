@@ -113,8 +113,10 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
           data: {
             source_power_kw: deviceStates[e.source]?.power_kw ?? 0,
             source_type: deviceStates[e.source]?.device_type ?? '',
+            source_total_active_kw: deviceStates[e.source]?.total_active_kw ?? 0,
             target_power_kw: deviceStates[e.target]?.power_kw ?? 0,
             target_type: deviceStates[e.target]?.device_type ?? '',
+            target_total_active_kw: deviceStates[e.target]?.total_active_kw ?? 0,
           },
         }));
 
@@ -222,8 +224,10 @@ export const MicrogridCanvas: React.FC<MicrogridCanvasProps> = ({
             ...edge.data,
             source_power_kw: srcState?.power_kw ?? 0,
             source_type: srcState?.device_type ?? '',
+            source_total_active_kw: srcState?.total_active_kw ?? 0,
             target_power_kw: tgtState?.power_kw ?? 0,
             target_type: tgtState?.device_type ?? '',
+            target_total_active_kw: tgtState?.total_active_kw ?? 0,
           },
         };
       })

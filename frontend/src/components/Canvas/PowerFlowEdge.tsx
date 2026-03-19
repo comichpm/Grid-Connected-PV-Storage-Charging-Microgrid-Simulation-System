@@ -47,10 +47,20 @@ export interface PowerFlowEdgeData {
   source_power_kw?: number;
   /** device_type string of the SOURCE node */
   source_type?: string;
+  /**
+   * total_active_kw measured by the SOURCE node when it is a SmartMeter.
+   * This is the branch-local sum of monitored devices – NOT the adjacent
+   * grid's total power, which would incorrectly aggregate all branches.
+   */
+  source_total_active_kw?: number;
   /** power_kw of the TARGET device */
   target_power_kw?: number;
   /** device_type string of the TARGET node */
   target_type?: string;
+  /**
+   * total_active_kw measured by the TARGET node when it is a SmartMeter.
+   */
+  target_total_active_kw?: number;
 }
 
 const IDLE_COLOR = '#475569';
@@ -60,6 +70,21 @@ const DOT_COUNT = 3;
 // ─────────────────────────────────────────────────────────────────────────────
 // Physics helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * "Routing" devices are intermediate nodes that aggregate or relay power from
+ * multiple branches (grid slack-bus, smart meter).
+ *
+ * "Terminal" devices are leaf nodes with a definitive individual power_kw
+ * (pv, bess, load, ev_charger).
+ *
+ * This distinction is crucial for branch-independent power-flow display:
+ *   • SM ↔ terminal  →  use the terminal's power_kw  (branch magnitude is the device's own output/input)
+ *   • SM ↔ routing   →  use the SM's total_active_kw  (Grid.power_kw aggregates ALL branches; wrong for this one)
+ */
+function isRoutingDevice(type: string): boolean {
+  return type === 'grid' || type === 'smart_meter';
+}
 
 /**
  * Returns true when the device is currently injecting energy into the local bus
@@ -93,33 +118,53 @@ function absorbsEnergy(power: number, type: string): boolean {
 /**
  * Determine the physical flow direction for an edge.
  *
+ * For SmartMeter edges the direction depends on whether the OTHER endpoint
+ * is a routing device (grid/SM) or a terminal device (pv/bess/load/ev):
+ *   • SM ↔ terminal  – direction determined by the terminal's power_kw
+ *   • SM ↔ routing   – direction determined by the SM's total_active_kw
+ *     (the SM knows exactly what power its branch is producing/consuming;
+ *      the Grid's power_kw spans all branches and must not be used here)
+ *
  * @returns `true`  = forward  (energy flows source → target)
  *          `false` = backward (energy flows target → source)
  *          `null`  = idle / indeterminate (no animation)
  */
 function getFlowDirection(
-  srcPower: number, srcType: string,
-  tgtPower: number, tgtType: string,
+  srcPower: number, srcType: string, srcTotalActiveKW: number,
+  tgtPower: number, tgtType: string, tgtTotalActiveKW: number,
 ): boolean | null {
   const srcIsSM = srcType === 'smart_meter';
   const tgtIsSM = tgtType === 'smart_meter';
 
-  // ── SmartMeter is transparent: use the non-SM endpoint ──────────────────
+  // ── SmartMeter as source ──────────────────────────────────────────────────
   if (srcIsSM && !tgtIsSM) {
-    // Edge: SM → X  — direction is dictated by X's role
-    if (injectsEnergy(tgtPower, tgtType)) return false; // X generates → X→SM (backward)
-    if (absorbsEnergy(tgtPower, tgtType)) return true;  // X consumes  → SM→X (forward)
+    if (isRoutingDevice(tgtType)) {
+      // SM → Grid (or SM → SM): use THIS SM's branch power, not the Grid's total
+      if (srcTotalActiveKW < -THRESHOLD_KW) return true;  // net generation → export (SM→Grid)
+      if (srcTotalActiveKW > THRESHOLD_KW)  return false; // net consumption → import (Grid→SM)
+      return null;
+    }
+    // SM → terminal device: direction from the terminal's own power
+    if (injectsEnergy(tgtPower, tgtType)) return false; // terminal generates → terminal→SM
+    if (absorbsEnergy(tgtPower, tgtType)) return true;  // terminal consumes  → SM→terminal
     return null;
   }
 
+  // ── SmartMeter as target ──────────────────────────────────────────────────
   if (tgtIsSM && !srcIsSM) {
-    // Edge: X → SM  — direction is dictated by X's role
-    if (injectsEnergy(srcPower, srcType)) return true;  // X generates → X→SM (forward)
-    if (absorbsEnergy(srcPower, srcType)) return false; // X consumes  → SM→X (backward)
+    if (isRoutingDevice(srcType)) {
+      // Grid → SM (or SM → SM): use THIS SM's branch power, not the Grid's total
+      if (tgtTotalActiveKW < -THRESHOLD_KW) return false; // net generation → export (SM→Grid = backward)
+      if (tgtTotalActiveKW > THRESHOLD_KW)  return true;  // net consumption → import (Grid→SM = forward)
+      return null;
+    }
+    // terminal → SM: direction from the terminal's own power
+    if (injectsEnergy(srcPower, srcType)) return true;  // terminal generates → terminal→SM
+    if (absorbsEnergy(srcPower, srcType)) return false; // terminal consumes  → SM→terminal
     return null;
   }
 
-  // ── General case: check both endpoints ──────────────────────────────────
+  // ── General case: neither endpoint is a SmartMeter ───────────────────────
   const srcInj = injectsEnergy(srcPower, srcType);
   const tgtInj = injectsEnergy(tgtPower, tgtType);
   const srcAbs = absorbsEnergy(srcPower, srcType);
@@ -140,40 +185,56 @@ function getFlowDirection(
 
 /** Pick the edge color based on which device is the physical energy injector. */
 function getFlowColor(
-  srcPower: number, srcType: string,
-  tgtPower: number, tgtType: string,
+  srcPower: number, srcType: string, srcTotalActiveKW: number,
+  tgtPower: number, tgtType: string, tgtTotalActiveKW: number,
   flowForward: boolean,
 ): string {
-  // The injecting endpoint drives the color choice
   const injType  = flowForward ? srcType  : tgtType;
   const injPower = flowForward ? srcPower : tgtPower;
 
-  // When the injector is a smart meter, fall back to the absorbing side's type
-  const effectiveType = injType === 'smart_meter'
-    ? (flowForward ? tgtType : srcType)
-    : injType;
+  // SM ↔ routing edge: color from the SM's measured branch power
+  if (injType === 'smart_meter') {
+    const smKW = flowForward ? srcTotalActiveKW : tgtTotalActiveKW;
+    if (smKW < -THRESHOLD_KW) return '#4ade80'; // net generation → green
+    return '#f97316';                            // net consumption → orange
+  }
 
-  if (effectiveType === 'pv') return '#4ade80';                          // green – solar
-  if (effectiveType === 'bess' && injPower < -THRESHOLD_KW) return '#4ade80'; // green – discharge
-  if (effectiveType === 'grid') return '#fbbf24';                        // amber – grid supply
+  if (injType === 'pv') return '#4ade80';                              // green – solar
+  if (injType === 'bess' && injPower < -THRESHOLD_KW) return '#4ade80'; // green – BESS discharge
+  if (injType === 'grid') return '#fbbf24';                             // amber – grid supply
 
   return '#f97316'; // orange – load / EV / BESS charging
 }
 
 /**
  * Representative power magnitude for the animation speed and label.
- * Prefer the non-smart-meter endpoint; if both are the same type take the
- * smaller absolute value as a conservative estimate.
+ *
+ * Key rule: for SM ↔ routing-device (Grid/SM) edges, use the SM's
+ * total_active_kw as the branch power.  The Grid's power_kw spans all
+ * connected branches and must NOT be used here — that would make an
+ * idle branch (PV/BESS at 0 kW) appear to carry the full grid load.
+ *
+ * For SM ↔ terminal-device edges, use the terminal's power_kw as before.
  */
 function getAbsKW(
-  srcPower: number, srcType: string,
-  tgtPower: number, tgtType: string,
+  srcPower: number, srcType: string, srcTotalActiveKW: number,
+  tgtPower: number, tgtType: string, tgtTotalActiveKW: number,
 ): number {
+  if (srcType === 'smart_meter') {
+    // SM is source: choose magnitude based on what the target is
+    return isRoutingDevice(tgtType)
+      ? Math.abs(srcTotalActiveKW)  // SM↔Grid or SM↔SM: use SM's branch measurement
+      : Math.abs(tgtPower);         // SM↔terminal: use the terminal's power
+  }
+  if (tgtType === 'smart_meter') {
+    // SM is target: choose magnitude based on what the source is
+    return isRoutingDevice(srcType)
+      ? Math.abs(tgtTotalActiveKW)  // Grid↔SM or SM↔SM: use SM's branch measurement
+      : Math.abs(srcPower);         // terminal↔SM: use the terminal's power
+  }
+  // Both are non-SM devices – use the more conservative (smaller non-zero) value
   const sa = Math.abs(srcPower);
   const ta = Math.abs(tgtPower);
-  if (srcType === 'smart_meter') return ta;
-  if (tgtType === 'smart_meter') return sa;
-  // Both are real devices – use the min as a conservative edge-power estimate
   if (sa < THRESHOLD_KW) return ta;
   if (ta < THRESHOLD_KW) return sa;
   return Math.min(sa, ta);
@@ -194,14 +255,16 @@ export const PowerFlowEdge: React.FC<EdgeProps> = ({
   const d = (data ?? {}) as PowerFlowEdgeData;
   const srcPower = d.source_power_kw ?? 0;
   const srcType  = d.source_type  ?? '';
+  const srcTotalKW = d.source_total_active_kw ?? 0;
   const tgtPower = d.target_power_kw ?? 0;
   const tgtType  = d.target_type  ?? '';
+  const tgtTotalKW = d.target_total_active_kw ?? 0;
 
-  const flowDirection = getFlowDirection(srcPower, srcType, tgtPower, tgtType);
+  const flowDirection = getFlowDirection(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW);
   const isActive = flowDirection !== null;
-  const absKW = getAbsKW(srcPower, srcType, tgtPower, tgtType);
+  const absKW = getAbsKW(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW);
   const color = isActive
-    ? getFlowColor(srcPower, srcType, tgtPower, tgtType, flowDirection)
+    ? getFlowColor(srcPower, srcType, srcTotalKW, tgtPower, tgtType, tgtTotalKW, flowDirection)
     : IDLE_COLOR;
 
   // Dot speed: faster for higher power (0.8 s → 3.5 s range)
